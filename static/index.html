@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tamarack Surf Forecast</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+    <link rel="icon" type="image/png" href="/static/onshore_favicon.png">
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .chart-container {
+            height: 350px;
+            width: 100%;
+        }
+        .loading-dots {
+            display: inline-block;
+            position: relative;
+            width: 80px;
+            height: 80px;
+        }
+        .loading-dots div {
+            position: absolute;
+            top: 33px;
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: #3b82f6;
+            animation-timing-function: cubic-bezier(0, 1, 1, 0);
+        }
+        .loading-dots div:nth-child(1) {
+            left: 8px;
+            animation: dots1 0.6s infinite;
+        }
+        .loading-dots div:nth-child(2) {
+            left: 8px;
+            animation: dots2 0.6s infinite;
+        }
+        .loading-dots div:nth-child(3) {
+            left: 32px;
+            animation: dots2 0.6s infinite;
+        }
+        .loading-dots div:nth-child(4) {
+            left: 56px;
+            animation: dots3 0.6s infinite;
+        }
+        @keyframes dots1 {
+            0% { transform: scale(0); }
+            100% { transform: scale(1); }
+        }
+        @keyframes dots3 {
+            0% { transform: scale(1); }
+            100% { transform: scale(0); }
+        }
+        @keyframes dots2 {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(24px, 0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    
+    <!-- Clean Header -->
+    <header class="bg-white border-b border-gray-100">
+        <div class="max-w-5xl mx-auto px-6 py-4">
+            <h1 class="text-xl font-semibold text-gray-900">Tamarack</h1>
+            <p class="text-sm text-gray-500">San Diego County</p>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-6 py-6">
+        
+        <!-- Current Conditions - 2x2 Grid -->
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-white rounded-lg border border-gray-200 p-4">
+                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Current Waves</div>
+                <div id="current-waves">
+                    <div class="flex items-center justify-center h-12">
+                        <div class="loading-dots">
+                            <div></div><div></div><div></div><div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg border border-gray-200 p-4">
+                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Current Tide</div>
+                <div id="current-tide">
+                    <div class="flex items-center justify-center h-12">
+                        <div class="loading-dots">
+                            <div></div><div></div><div></div><div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg border border-gray-200 p-4">
+                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Wind</div>
+                <div id="wind">
+                    <div class="flex items-center justify-center h-12">
+                        <div class="loading-dots">
+                            <div></div><div></div><div></div><div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg border border-gray-200 p-4">
+                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Water Temp</div>
+                <div id="water-temp">
+                    <div class="flex items-center justify-center h-12">
+                        <div class="loading-dots">
+                            <div></div><div></div><div></div><div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Cam View -->
+        <div class="bg-white rounded-lg border border-gray-200 p-5 mb-6">
+            <h3 class="text-sm font-medium text-gray-900 mb-4">Live Cam - Tamarack</h3>
+            <div class="relative w-full" style="padding-bottom: 56.25%; height: 0;">
+                <iframe 
+                    id="cam-iframe"
+                    width="100%" 
+                    height="100%" 
+                    src="//portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true" 
+                    frameborder="0" 
+                    allowfullscreen="true" 
+                    allow="autoplay; fullscreen" 
+                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 8px;">
+                </iframe>
+            </div>
+        </div>
+
+        <!-- Charts - Side by Side -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white rounded-lg border border-gray-200 p-5">
+                <h3 class="text-sm font-medium text-gray-900 mb-4">Wave Height</h3>
+                <div id="wave-chart" class="chart-container"></div>
+            </div>
+            
+            <div class="bg-white rounded-lg border border-gray-200 p-5">
+                <h3 class="text-sm font-medium text-gray-900 mb-4">Tides</h3>
+                <div id="tide-chart" class="chart-container"></div>
+            </div>
+        </div>
+
+        <!-- Minimal Footer -->
+        <div class="text-center mt-6">
+            <p class="text-xs text-gray-400">NOAA GFS • San Diego Tide Station</p>
+            <p id="last-updated" class="text-xs text-gray-400 mt-1"></p>
+        </div>
+    </main>
+
+    <script>
+        let waveChart, tideChart;
+        
+        function generateTimeMarks() {
+            const marks = [];
+            const now = new Date();
+            
+            // Generate marks for next 5 days
+            for (let i = 0; i < 5; i++) {
+                const date = new Date(now);
+                date.setDate(date.getDate() + i);
+                
+                // 6 AM mark
+                const morning = new Date(date);
+                morning.setHours(6, 0, 0, 0);
+                marks.push({
+                    xAxis: morning.getTime(),
+                    lineStyle: {
+                        color: '#fbbf24',
+                        type: 'dashed',
+                        width: 1,
+                        opacity: 0.5
+                    },
+                    label: {
+                        show: false
+                    }
+                });
+                
+                // 6 PM mark
+                const evening = new Date(date);
+                evening.setHours(18, 0, 0, 0);
+                marks.push({
+                    xAxis: evening.getTime(),
+                    lineStyle: {
+                        color: '#f97316',
+                        type: 'dashed',
+                        width: 1,
+                        opacity: 0.5
+                    },
+                    label: {
+                        show: false
+                    }
+                });
+            }
+            
+            return marks;
+        }
+        
+        function initCharts() {
+            waveChart = echarts.init(document.getElementById('wave-chart'));
+            tideChart = echarts.init(document.getElementById('tide-chart'));
+            
+            waveChart.showLoading('default', {
+                text: '',
+                color: '#3b82f6',
+                textColor: '#374151',
+                maskColor: 'rgba(255, 255, 255, 0.8)',
+                zlevel: 0
+            });
+            
+            tideChart.showLoading('default', {
+                text: '',
+                color: '#3b82f6',
+                textColor: '#374151',
+                maskColor: 'rgba(255, 255, 255, 0.8)',
+                zlevel: 0
+            });
+        }
+        
+        function updateWaveChart(waveData) {
+            if (!waveData || waveData.length === 0) return;
+            
+            // Group wave data by date and calculate daily averages
+            const dailyData = {};
+            waveData.forEach(d => {
+                const date = new Date(d.time);
+                const dateKey = date.toDateString();
+                
+                if (!dailyData[dateKey]) {
+                    dailyData[dateKey] = {
+                        heights: [],
+                        date: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0) // Noon
+                    };
+                }
+                dailyData[dateKey].heights.push(d.height);
+            });
+            
+            // Calculate averages and prepare data
+            const dailyAverages = Object.keys(dailyData).map(dateKey => {
+                const data = dailyData[dateKey];
+                const avgHeight = data.heights.reduce((sum, h) => sum + h, 0) / data.heights.length;
+                return {
+                    time: data.date,
+                    height: Math.round(avgHeight * 10) / 10 // Round to 1 decimal
+                };
+            }).sort((a, b) => a.time - b.time);
+            
+            const times = dailyAverages.map(d => d.time);
+            const heights = dailyAverages.map(d => d.height);
+            
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    borderColor: '#e5e7eb',
+                    borderWidth: 1,
+                    textStyle: {
+                        color: '#374151',
+                        fontSize: 12
+                    },
+                    formatter: function(params) {
+                        const date = new Date(params[0].value[0]);
+                        const now = new Date();
+                        const isToday = date.toDateString() === now.toDateString();
+                        const isTomorrow = date.toDateString() === new Date(now.getTime() + 24*60*60*1000).toDateString();
+                        
+                        let dayName;
+                        if (isToday) {
+                            dayName = 'Today';
+                        } else if (isTomorrow) {
+                            dayName = 'Tomorrow';
+                        } else {
+                            dayName = date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+                        }
+                        
+                        const height = params[0].value[1];
+                        return `${dayName}<br/>Average Wave Height: ${height} ft`;
+                    }
+                },
+                grid: {
+                    left: '8%',
+                    right: '5%',
+                    bottom: '15%',
+                    top: '10%'
+                },
+                xAxis: {
+                    type: 'time',
+                    boundaryGap: false,
+                    axisLine: {
+                        lineStyle: { color: '#e5e7eb' }
+                    },
+                    axisLabel: {
+                        color: '#6b7280',
+                        fontSize: 11,
+                        formatter: function(value) {
+                            const date = new Date(value);
+                            const now = new Date();
+                            const isToday = date.toDateString() === now.toDateString();
+                            const isTomorrow = date.toDateString() === new Date(now.getTime() + 24*60*60*1000).toDateString();
+                            
+                            if (isToday) {
+                                return 'Today';
+                            } else if (isTomorrow) {
+                                return 'Tomorrow';
+                            } else {
+                                return date.toLocaleDateString('en-US', { weekday: 'short' });
+                            }
+                        }
+                    },
+                    splitLine: {
+                        show: true,
+                        lineStyle: { color: '#f3f4f6', width: 1 }
+                    }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: 'Height (ft)',
+                    nameTextStyle: {
+                        color: '#6b7280',
+                        fontSize: 11
+                    },
+                    axisLine: {
+                        lineStyle: { color: '#e5e7eb' }
+                    },
+                    axisLabel: {
+                        color: '#6b7280',
+                        fontSize: 11,
+                        formatter: '{value} ft'
+                    },
+                    splitLine: {
+                        lineStyle: { color: '#f3f4f6', width: 1 }
+                    }
+                },
+                series: [{
+                    name: 'Daily Average Wave Height',
+                    type: 'line',
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 8,
+                    lineStyle: {
+                        width: 3,
+                        color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                            {
+                                offset: 0,
+                                color: 'rgb(34, 197, 94)'
+                            },
+                            {
+                                offset: 1,
+                                color: 'rgb(59, 130, 246)'
+                            }
+                        ])
+                    },
+                    itemStyle: {
+                        color: 'rgb(59, 130, 246)',
+                        borderColor: '#fff',
+                        borderWidth: 2
+                    },
+                    areaStyle: {
+                        opacity: 0.3,
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            {
+                                offset: 0,
+                                color: 'rgb(34, 197, 94)'
+                            },
+                            {
+                                offset: 1,
+                                color: 'rgb(59, 130, 246)'
+                            }
+                        ])
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    },
+                    label: {
+                        show: true,
+                        position: 'top',
+                        formatter: function(params) {
+                            const date = new Date(params.value[0]);
+                            const now = new Date();
+                            const isToday = date.toDateString() === now.toDateString();
+                            const isTomorrow = date.toDateString() === new Date(now.getTime() + 24*60*60*1000).toDateString();
+                            
+                            let dayLabel;
+                            if (isToday) {
+                                dayLabel = 'Today';
+                            } else if (isTomorrow) {
+                                dayLabel = 'Tomorrow';
+                            } else {
+                                dayLabel = date.toLocaleDateString('en-US', { weekday: 'short' });
+                            }
+                            
+                            return `${dayLabel}\n${params.value[1]} ft`;
+                        },
+                        fontSize: 11,
+                        color: '#374151',
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        borderColor: '#e5e7eb',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        padding: [4, 8],
+                        lineHeight: 14
+                    },
+                    data: times.map((time, i) => [time, heights[i]])
+                }]
+            };
+            
+            waveChart.hideLoading();
+            waveChart.setOption(option);
+        }
+        
+        function updateTideChart(tideData) {
+            if (!tideData || tideData.length === 0) return;
+            
+            // Group tide data by date for daily labels
+            const dailyTides = {};
+            tideData.forEach(d => {
+                const date = new Date(d.time);
+                const dateKey = date.toDateString();
+                
+                if (!dailyTides[dateKey]) {
+                    dailyTides[dateKey] = [];
+                }
+                dailyTides[dateKey].push({
+                    time: date,
+                    height: d.height,
+                    type: d.type
+                });
+            });
+            
+            const times = tideData.map(d => new Date(d.time));
+            const heights = tideData.map(d => d.height);
+            const types = tideData.map(d => d.type);
+            
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    borderColor: '#e5e7eb',
+                    borderWidth: 1,
+                    textStyle: {
+                        color: '#374151',
+                        fontSize: 12
+                    },
+                    formatter: function(params) {
+                        const point = params[0];
+                        const date = new Date(point.value[0]);
+                        const now = new Date();
+                        const isToday = date.toDateString() === now.toDateString();
+                        const isTomorrow = date.toDateString() === new Date(now.getTime() + 24*60*60*1000).toDateString();
+                        
+                        let dayName;
+                        if (isToday) {
+                            dayName = 'Today';
+                        } else if (isTomorrow) {
+                            dayName = 'Tomorrow';
+                        } else {
+                            dayName = date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+                        }
+                        
+                        const time = date.toLocaleTimeString('en-US', { 
+                            hour: 'numeric', 
+                            minute: '2-digit',
+                            hour12: true 
+                        });
+                        const height = point.value[1];
+                        const type = types[point.dataIndex];
+                        return `${dayName} ${time}<br/>${type} Tide: ${height} ft`;
+                    }
+                },
+                grid: {
+                    left: '8%',
+                    right: '5%',
+                    bottom: '15%',
+                    top: '10%'
+                },
+                xAxis: {
+                    type: 'time',
+                    boundaryGap: false,
+                    axisLine: {
+                        lineStyle: { color: '#e5e7eb' }
+                    },
+                    axisLabel: {
+                        color: '#6b7280',
+                        fontSize: 11,
+                        formatter: function(value) {
+                            const date = new Date(value);
+                            const now = new Date();
+                            const isToday = date.toDateString() === now.toDateString();
+                            const isTomorrow = date.toDateString() === new Date(now.getTime() + 24*60*60*1000).toDateString();
+                            
+                            if (isToday) {
+                                return 'Today';
+                            } else if (isTomorrow) {
+                                return 'Tomorrow';
+                            } else {
+                                return date.toLocaleDateString('en-US', { weekday: 'short' });
+                            }
+                        }
+                    },
+                    splitLine: {
+                        show: true,
+                        lineStyle: { color: '#f3f4f6', width: 1 }
+                    }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: 'Height (ft)',
+                    nameTextStyle: {
+                        color: '#6b7280',
+                        fontSize: 11
+                    },
+                    axisLine: {
+                        lineStyle: { color: '#e5e7eb' }
+                    },
+                    axisLabel: {
+                        color: '#6b7280',
+                        fontSize: 11,
+                        formatter: '{value} ft'
+                    },
+                    splitLine: {
+                        lineStyle: { color: '#f3f4f6', width: 1 }
+                    }
+                },
+                series: [{
+                    name: 'Tide Height',
+                    type: 'line',
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    lineStyle: {
+                        width: 2,
+                        color: 'rgb(59, 130, 246)'
+                    },
+                    itemStyle: {
+                        color: function(params) {
+                            return types[params.dataIndex] === 'High' ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+                        }
+                    },
+                    emphasis: {
+                        focus: 'series'
+                    },
+                    data: times.map((time, i) => [time, heights[i]])
+                }]
+            };
+            
+            tideChart.hideLoading();
+            tideChart.setOption(option);
+        }
+        
+        async function loadForecast() {
+            try {
+                const response = await fetch('/api/tamarack/forecast');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Forecast error:', data.error);
+                    return;
+                }
+                
+                // Update charts
+                if (data.chart_data?.wave_data) {
+                    updateWaveChart(data.chart_data.wave_data);
+                }
+                
+                if (data.chart_data?.tide_data) {
+                    updateTideChart(data.chart_data.tide_data);
+                }
+                
+                
+                // Update timestamp
+                if (data.generated_at) {
+                    const updateTime = new Date(data.generated_at).toLocaleString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    });
+                    document.getElementById('last-updated').textContent = `Updated ${updateTime}`;
+                }
+                
+            } catch (error) {
+                console.error('Error loading forecast:', error);
+            }
+        }
+        
+        async function loadCurrent() {
+            try {
+                const response = await fetch('/api/tamarack/current');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Current error:', data.error);
+                    return;
+                }
+                
+                // Update current waves
+                if (data.waves) {
+                    document.getElementById('current-waves').innerHTML = `
+                        <div class="text-2xl font-bold text-gray-900">${data.waves.height} ft</div>
+                        <div class="text-xs text-gray-500">${data.waves.period}s • ${data.waves.direction}</div>
+                    `;
+                }
+                
+                // Update current tide
+                if (data.current_tide) {
+                    const directionIcon = data.current_tide.direction === 'Rising' ? '↗' : '↘';
+                    document.getElementById('current-tide').innerHTML = `
+                        <div class="text-2xl font-bold text-gray-900">${data.current_tide.current_height}ft ${directionIcon}</div>
+                        <div class="text-xs text-gray-500">${data.current_tide.next_type} ${data.current_tide.next_height}ft at ${data.current_tide.next_time}</div>
+                    `;
+                }
+                
+                // Update wind data
+                if (data.wind) {
+                    document.getElementById('wind').innerHTML = `
+                        <div class="text-2xl font-bold text-gray-900">${data.wind.wind_speed_mph} mph</div>
+                        <div class="text-xs text-gray-500">${data.wind.wind_direction} • ${data.wind.wind_strength}</div>
+                    `;
+                } else {
+                    document.getElementById('wind').innerHTML = `
+                        <div class="text-sm text-gray-400">Wind data unavailable</div>
+                    `;
+                }
+                
+                // Update water temperature
+                if (data.water_temp) {
+                    document.getElementById('water-temp').innerHTML = `
+                        <div class="text-2xl font-bold text-gray-900">${data.water_temp.water_temp_f}°F</div>
+                        <div class="text-xs text-gray-500">${data.water_temp.water_temp_c}°C • ${data.water_temp.station}</div>
+                    `;
+                } else {
+                    document.getElementById('water-temp').innerHTML = `
+                        <div class="text-sm text-gray-400">Temperature data unavailable</div>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Error loading current conditions:', error);
+            }
+        }
+        
+        
+        // Function to reload the cam iframe
+        function reloadCamStream() {
+            const iframe = document.getElementById('cam-iframe');
+            if (iframe) {
+                const src = iframe.src;
+                iframe.src = '';
+                setTimeout(() => {
+                    iframe.src = src;
+                }, 100);
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            loadCurrent();
+            loadForecast();
+        });
+        
+        // Auto-refresh every 10 minutes
+        setInterval(() => {
+            loadCurrent();
+            loadForecast();
+        }, 10 * 60 * 1000);
+        
+        // Reload cam stream every 30 seconds to prevent timeout
+        setInterval(() => {
+            reloadCamStream();
+        }, 30 * 1000);
+        
+        // Responsive charts
+        window.addEventListener('resize', () => {
+            if (waveChart) waveChart.resize();
+            if (tideChart) tideChart.resize();
+        });
+    </script>
+</body>
+</html>
