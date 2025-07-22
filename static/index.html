@@ -6,7 +6,7 @@
     <title>Tamarack Surf Forecast</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
-    <link rel="icon" type="image/png" href="/static/onshore_favicon.png">
+    <link rel="icon" type="image/png" href="/static/duckdive.png">
     <style>
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -148,6 +148,7 @@
                 <div id="tide-chart" class="chart-container"></div>
             </div>
         </div>
+
 
         <!-- Minimal Footer -->
         <div class="text-center mt-6">
@@ -419,20 +420,33 @@
         function updateTideChart(tideData) {
             if (!tideData || tideData.length === 0) return;
             
-            // Group tide data by date for daily labels
-            const dailyTides = {};
+            // Create unique daily labels
+            const dayLabels = [];
+            const seenDates = new Set();
+            
             tideData.forEach(d => {
                 const date = new Date(d.time);
                 const dateKey = date.toDateString();
                 
-                if (!dailyTides[dateKey]) {
-                    dailyTides[dateKey] = [];
+                if (!seenDates.has(dateKey)) {
+                    seenDates.add(dateKey);
+                    const now = new Date();
+                    const isToday = date.toDateString() === now.toDateString();
+                    const isTomorrow = date.toDateString() === new Date(now.getTime() + 24*60*60*1000).toDateString();
+                    
+                    let dayName;
+                    if (isToday) {
+                        dayName = 'Today';
+                    } else if (isTomorrow) {
+                        dayName = 'Tomorrow';
+                    } else {
+                        dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                    }
+                    
+                    // Use noon of each day for label positioning
+                    const labelTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0);
+                    dayLabels.push({ time: labelTime, label: dayName });
                 }
-                dailyTides[dateKey].push({
-                    time: date,
-                    height: d.height,
-                    type: d.type
-                });
             });
             
             const times = tideData.map(d => new Date(d.time));
@@ -452,19 +466,6 @@
                     formatter: function(params) {
                         const point = params[0];
                         const date = new Date(point.value[0]);
-                        const now = new Date();
-                        const isToday = date.toDateString() === now.toDateString();
-                        const isTomorrow = date.toDateString() === new Date(now.getTime() + 24*60*60*1000).toDateString();
-                        
-                        let dayName;
-                        if (isToday) {
-                            dayName = 'Today';
-                        } else if (isTomorrow) {
-                            dayName = 'Tomorrow';
-                        } else {
-                            dayName = date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-                        }
-                        
                         const time = date.toLocaleTimeString('en-US', { 
                             hour: 'numeric', 
                             minute: '2-digit',
@@ -472,7 +473,7 @@
                         });
                         const height = point.value[1];
                         const type = types[point.dataIndex];
-                        return `${dayName} ${time}<br/>${type} Tide: ${height} ft`;
+                        return `${time}<br/>${type} Tide: ${height} ft`;
                     }
                 },
                 grid: {
@@ -488,26 +489,13 @@
                         lineStyle: { color: '#e5e7eb' }
                     },
                     axisLabel: {
-                        color: '#6b7280',
-                        fontSize: 11,
-                        formatter: function(value) {
-                            const date = new Date(value);
-                            const now = new Date();
-                            const isToday = date.toDateString() === now.toDateString();
-                            const isTomorrow = date.toDateString() === new Date(now.getTime() + 24*60*60*1000).toDateString();
-                            
-                            if (isToday) {
-                                return 'Today';
-                            } else if (isTomorrow) {
-                                return 'Tomorrow';
-                            } else {
-                                return date.toLocaleDateString('en-US', { weekday: 'short' });
-                            }
-                        }
+                        show: false  // Hide default labels
+                    },
+                    axisTick: {
+                        show: false
                     },
                     splitLine: {
-                        show: true,
-                        lineStyle: { color: '#f3f4f6', width: 1 }
+                        show: false
                     }
                 },
                 yAxis: {
@@ -534,18 +522,42 @@
                     type: 'line',
                     smooth: true,
                     symbol: 'circle',
-                    symbolSize: 6,
+                    symbolSize: 4,
                     lineStyle: {
-                        width: 2,
+                        width: 3,
                         color: 'rgb(59, 130, 246)'
                     },
                     itemStyle: {
                         color: function(params) {
                             return types[params.dataIndex] === 'High' ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
-                        }
+                        },
+                        borderColor: '#fff',
+                        borderWidth: 2
                     },
-                    emphasis: {
-                        focus: 'series'
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
+                            { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
+                        ])
+                    },
+                    markLine: {
+                        silent: true,
+                        lineStyle: {
+                            color: '#e5e7eb',
+                            width: 1,
+                            type: 'solid'
+                        },
+                        data: dayLabels.map(day => ({
+                            xAxis: day.time,
+                            label: {
+                                show: true,
+                                position: 'insideEndBottom',
+                                formatter: day.label,
+                                color: '#6b7280',
+                                fontSize: 11,
+                                fontWeight: 'normal'
+                            }
+                        }))
                     },
                     data: times.map((time, i) => [time, heights[i]])
                 }]
@@ -554,6 +566,7 @@
             tideChart.hideLoading();
             tideChart.setOption(option);
         }
+        
         
         async function loadForecast() {
             try {
@@ -573,6 +586,7 @@
                 if (data.chart_data?.tide_data) {
                     updateTideChart(data.chart_data.tide_data);
                 }
+                
                 
                 
                 // Update timestamp
@@ -683,6 +697,7 @@
         window.addEventListener('resize', () => {
             if (waveChart) waveChart.resize();
             if (tideChart) tideChart.resize();
+            if (windChart) windChart.resize();
         });
     </script>
 </body>

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: duckdive-surf-forecast
+    runtime: python3
+    plan: free
+    buildCommand: |
+      # Install system dependencies
+      apt-get update
+      apt-get install -y libeccodes-dev libeccodes-tools
+      # Install Python dependencies
+      pip install --upgrade pip setuptools wheel
+      pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    autoDeploy: false
