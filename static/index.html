@@ -127,10 +127,12 @@
                     id="cam-iframe"
                     width="100%" 
                     height="100%" 
-                    src="//portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true" 
+                    src="https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true&autostart=true&mute=false" 
                     frameborder="0" 
                     allowfullscreen="true" 
                     allow="autoplay; fullscreen" 
+                    referrerpolicy="no-referrer-when-downgrade"
+                    sandbox="allow-scripts allow-same-origin allow-presentation"
                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 8px;">
                 </iframe>
             </div>
@@ -661,7 +663,6 @@
                 console.error('Error loading current conditions:', error);
             }
         }
-        
         
         // Function to reload the cam iframe
         function reloadCamStream() {
