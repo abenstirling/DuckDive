@@ -4,12 +4,9 @@ services:
     runtime: python3
     plan: free
     buildCommand: |
-      # Install system dependencies
-      apt-get update
-      apt-get install -y libeccodes-dev libeccodes-tools
-      # Install Python dependencies
+      # Install Python dependencies with compatibility flags
       pip install --upgrade pip setuptools wheel
-      pip install -r requirements.txt
+      pip install --no-build-isolation -r requirements.txt
     startCommand: python main.py
     envVars:
       - key: PORT

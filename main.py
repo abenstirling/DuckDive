@@ -489,50 +489,49 @@ async def get_tamarack_forecast():
         )
 
 async def get_wind_data():
-    """Get current wind data from NOAA buoy"""
+    """Get current wind data from NOAA buoy - Note: Often unreliable due to NaN values"""
     if not SURFPY_AVAILABLE:
         return None
         
     try:
-        print("Fetching wind data from NOAA buoy...")
+        # Skip buoy wind data since it's unreliable - just return None
+        print("Skipping NOAA buoy wind data (unreliable NaN values)")
+        return None
+        
+        # Legacy buoy code (disabled)
         location = surfpy.Location(TAMARACK['lat'], TAMARACK['lng'], altitude=30.0, name='Tamarack')
         
         # Try Torrey Pines Outer buoy first (closest to Tamarack)
         try:
             buoy = surfpy.BuoyStation('46225', location)
             latest = buoy.fetch_latest_reading()
-            print(f"Buoy 46225 latest reading attributes: {dir(latest) if latest else 'None'}")
             
             if latest:
-                # Check all available attributes for debugging
-                for attr in dir(latest):
-                    if not attr.startswith('_'):
-                        try:
-                            value = getattr(latest, attr)
-                            if 'wind' in attr.lower():
-                                print(f"Wind-related attribute {attr}: {value}")
-                        except:
-                            pass
-                
-                # Try different possible wind attribute names
+                # Check for valid wind data (not NaN)
                 wind_speed = None
                 wind_direction = None
                 
                 for speed_attr in ['wind_speed', 'windspd', 'wind_spd', 'wspd']:
                     if hasattr(latest, speed_attr):
                         speed_val = getattr(latest, speed_attr)
-                        if speed_val and speed_val != -999 and not (speed_val != speed_val):
+                        # Check if value is not NaN and not -999 (missing data indicator)
+                        if speed_val is not None and speed_val == speed_val and speed_val != -999:
                             wind_speed = speed_val
-                            print(f"Found wind speed in {speed_attr}: {wind_speed}")
+                            print(f"Found valid wind speed in {speed_attr}: {wind_speed}")
                             break
+                        else:
+                            print(f"Invalid wind speed in {speed_attr}: {speed_val}")
                 
                 for dir_attr in ['wind_direction', 'winddir', 'wind_dir', 'wdir']:
                     if hasattr(latest, dir_attr):
                         dir_val = getattr(latest, dir_attr)
-                        if dir_val and dir_val != -999 and not (dir_val != dir_val):
+                        # Check if value is not NaN and not -999
+                        if dir_val is not None and dir_val == dir_val and dir_val != -999:
                             wind_direction = dir_val
-                            print(f"Found wind direction in {dir_attr}: {wind_direction}")
+                            print(f"Found valid wind direction in {dir_attr}: {wind_direction}")
                             break
+                        else:
+                            print(f"Invalid wind direction in {dir_attr}: {dir_val}")
                 
                 if wind_speed:
                     # Convert wind direction to compass direction
@@ -791,7 +790,7 @@ async def get_tamarack_current():
         if water_temp:
             current_conditions["water_temp"] = water_temp
         
-        # Add wind data - prefer forecast wind over buoy wind for current conditions
+        # Add wind data - use forecast wind for current conditions (buoy data is unreliable)
         if wind_forecast and len(wind_forecast) > 0:
             from pytz import UTC
             
@@ -832,9 +831,9 @@ async def get_tamarack_current():
                     "source": "NWS Forecast",
                     "timestamp": closest_wind['time']
                 }
-        elif current_wind:
-            # Fallback to buoy wind data
-            current_conditions["wind"] = current_wind
+        else:
+            # No wind data available
+            print("No wind data available from forecast or buoy")
         
         return current_conditions
         
