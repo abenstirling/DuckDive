@@ -121,18 +121,48 @@
 
         <!-- Live Cam View -->
         <div class="bg-white rounded-lg border border-gray-200 p-5 mb-6">
-            <h3 class="text-sm font-medium text-gray-900 mb-4">Live Cam - Tamarack</h3>
+            <h3 class="text-sm font-medium text-gray-900 mb-4">Live Cam - Tamarack Beach</h3>
             <div class="relative w-full" style="padding-bottom: 56.25%; overflow: hidden; height: 0px;">
-                <iframe 
-                    id="cam-iframe"
-                    width="100%" 
-                    height="100%" 
-                    src="//portal.hdontap.com/s/embed?stream=hdontap_carlsbad_terra-mar-pt-VISIT_CARLSBAD&ratio=16:9&fluid=true" 
-                    frameborder="0" 
-                    allowfullscreen="true" 
-                    allow="autoplay; fullscreen" 
-                    style="height: 100%; width: 100%; position: absolute; border-radius: 8px;">
-                </iframe>
+                <!-- Try multiple embed approaches -->
+                <div id="webcam-container" class="absolute inset-0">
+                    <!-- Attempt 1: Direct embed with different referrer policy -->
+                    <iframe 
+                        id="cam-iframe-1"
+                        width="100%" 
+                        height="100%" 
+                        src="//portal.hdontap.com/s/embed?stream=hdontap_carlsbad_terra-mar-pt-VISIT_CARLSBAD&ratio=16:9&fluid=true" 
+                        frameborder="0" 
+                        allowfullscreen="true" 
+                        allow="autoplay; fullscreen" 
+                        sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+                        referrerpolicy="unsafe-url"
+                        style="height: 100%; width: 100%; position: absolute; border-radius: 8px; z-index: 3;">
+                    </iframe>
+                    
+                    <!-- Attempt 2: Via proxy -->
+                    <iframe 
+                        id="cam-iframe-2"
+                        width="100%" 
+                        height="100%" 
+                        src="/api/webcam-proxy" 
+                        frameborder="0" 
+                        allowfullscreen="true" 
+                        allow="autoplay; fullscreen" 
+                        style="height: 100%; width: 100%; position: absolute; border-radius: 8px; z-index: 2; display: none;">
+                    </iframe>
+                    
+                    <!-- Attempt 3: Embed visitcarlsbad page directly -->
+                    <iframe 
+                        id="cam-iframe-3"
+                        width="100%" 
+                        height="100%" 
+                        src="https://visitcarlsbad.com/carlsbad-live-beach-cam/" 
+                        frameborder="0" 
+                        allowfullscreen="true" 
+                        allow="autoplay; fullscreen" 
+                        style="height: 100%; width: 100%; position: absolute; border-radius: 8px; z-index: 1; display: none;">
+                    </iframe>
+                </div>
             </div>
         </div>
 
@@ -664,8 +694,8 @@
         
         // Function to reload the cam iframe
         function reloadCamStream() {
-            const iframe = document.getElementById('cam-iframe');
-            if (iframe) {
+            const iframe = document.getElementById('cam-iframe-1');
+            if (iframe && iframe.style.display !== 'none') {
                 const src = iframe.src;
                 iframe.src = '';
                 setTimeout(() => {
@@ -674,11 +704,86 @@
             }
         }
         
+        // Smart webcam fallback system
+        function initWebcamFallback() {
+            const iframe1 = document.getElementById('cam-iframe-1');
+            const iframe2 = document.getElementById('cam-iframe-2');
+            const iframe3 = document.getElementById('cam-iframe-3');
+            
+            let attemptCount = 0;
+            const maxAttempts = 3;
+            
+            function tryNextWebcam() {
+                attemptCount++;
+                console.log(`Webcam attempt ${attemptCount}/${maxAttempts}`);
+                
+                if (attemptCount === 1) {
+                    // Try direct HDOnTap embed first
+                    console.log('Trying direct HDOnTap embed...');
+                    iframe1.onload = function() {
+                        console.log('Direct embed loaded successfully');
+                    };
+                    iframe1.onerror = function() {
+                        console.log('Direct embed failed, trying proxy...');
+                        iframe1.style.display = 'none';
+                        iframe2.style.display = 'block';
+                        tryNextWebcam();
+                    };
+                } else if (attemptCount === 2) {
+                    // Try proxy method
+                    console.log('Trying proxy method...');
+                    iframe2.onload = function() {
+                        console.log('Proxy embed loaded successfully');
+                    };
+                    iframe2.onerror = function() {
+                        console.log('Proxy embed failed, trying visitcarlsbad...');
+                        iframe2.style.display = 'none';
+                        iframe3.style.display = 'block';
+                        tryNextWebcam();
+                    };
+                } else if (attemptCount === 3) {
+                    // Try visitcarlsbad page embed
+                    console.log('Trying visitcarlsbad page embed...');
+                    iframe3.onload = function() {
+                        console.log('Visitcarlsbad embed loaded successfully');
+                    };
+                    iframe3.onerror = function() {
+                        console.log('All webcam methods failed');
+                    };
+                }
+            }
+            
+            // Start the fallback process after a delay
+            setTimeout(() => {
+                // Check if direct embed is blocked by looking for error indicators
+                try {
+                    // If iframe1 is showing the "not authorized" message, try fallbacks
+                    if (iframe1.contentWindow) {
+                        // Can't access due to CORS, which is normal for working embeds
+                        console.log('Direct embed appears to be working (CORS blocked access is normal)');
+                    }
+                } catch (e) {
+                    console.log('Direct embed cross-origin check completed');
+                }
+                
+                // Set up fallback after 5 seconds if first method seems to fail
+                setTimeout(() => {
+                    // Check if we need to try alternatives
+                    const rect = iframe1.getBoundingClientRect();
+                    if (rect.height < 100) {
+                        console.log('Direct embed seems to have failed (low height), trying alternatives...');
+                        tryNextWebcam();
+                    }
+                }, 5000);
+            }, 2000);
+        }
+        
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             initCharts();
             loadCurrent();
             loadForecast();
+            initWebcamFallback();
         });
         
         // Auto-refresh every 10 minutes

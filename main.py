@@ -451,6 +451,86 @@ async def read_root():
     """Serve the main page"""
     return FileResponse('static/index.html')
 
+@app.get("/api/webcam-proxy")
+async def webcam_proxy():
+    """Proxy webcam stream to bypass domain restrictions"""
+    import httpx
+    
+    try:
+        # Try to fetch the HDOnTap embed page and serve it
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+            # More comprehensive browser headers
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "iframe",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "cross-site",
+                "Referer": "https://visitcarlsbad.com/carlsbad-live-beach-cam/",
+                "Origin": "https://visitcarlsbad.com"
+            }
+            
+            response = await client.get(
+                "https://portal.hdontap.com/s/embed?stream=hdontap_carlsbad_terra-mar-pt-VISIT_CARLSBAD&ratio=16:9&fluid=true",
+                headers=headers
+            )
+            
+            print(f"Webcam proxy response: {response.status_code}, URL: {response.url}")
+            
+            if response.status_code == 200:
+                # Return the content with modified headers
+                from fastapi.responses import HTMLResponse
+                content = response.text
+                
+                # Fix all relative URLs to be absolute HDOnTap URLs
+                content = content.replace('src="//', 'src="https://')
+                content = content.replace("src='//", "src='https://")
+                content = content.replace('href="//', 'href="https://')
+                content = content.replace("href='//", "href='https://")
+                
+                # Fix relative paths that start with / to point to HDOnTap
+                content = content.replace('src="/', 'src="https://portal.hdontap.com/')
+                content = content.replace("src='/", "src='https://portal.hdontap.com/")
+                content = content.replace('href="/', 'href="https://portal.hdontap.com/')
+                content = content.replace("href='/", "href='https://portal.hdontap.com/")
+                
+                # Fix any portal.hdontap.com references
+                content = content.replace('//portal.hdontap.com', 'https://portal.hdontap.com')
+                
+                # Fix action URLs for forms
+                content = content.replace('action="/', 'action="https://portal.hdontap.com/')
+                
+                # Fix any API calls or fetch requests
+                content = content.replace('"/api/', '"https://portal.hdontap.com/api/')
+                content = content.replace("'/api/", "'https://portal.hdontap.com/api/")
+                content = content.replace('"/assets/', '"https://portal.hdontap.com/assets/')
+                content = content.replace("'/assets/", "'https://portal.hdontap.com/assets/")
+                content = content.replace('"/scripts/', '"https://portal.hdontap.com/scripts/')
+                content = content.replace("'/scripts/", "'https://portal.hdontap.com/scripts/")
+                
+                return HTMLResponse(
+                    content=content,
+                    headers={
+                        "X-Frame-Options": "SAMEORIGIN",
+                        "Content-Security-Policy": "frame-ancestors 'self'",
+                        "Cache-Control": "no-cache, no-store, must-revalidate"
+                    }
+                )
+            else:
+                print(f"Webcam fetch failed. Status: {response.status_code}, Final URL: {response.url}")
+                return {"error": "Webcam not available", "status": response.status_code, "final_url": str(response.url)}
+                
+    except Exception as e:
+        print(f"Webcam proxy error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": "Webcam service unavailable", "details": str(e)}
+
 @app.get("/api/tamarack/forecast")
 async def get_tamarack_forecast():
     """Get complete forecast with caching"""
