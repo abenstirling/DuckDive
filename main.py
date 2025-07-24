@@ -451,6 +451,11 @@ async def read_root():
     """Serve the main page"""
     return FileResponse('static/index.html')
 
+# should return page static/test.html
+@app.get("/test")
+async def read_test():
+    return FileResponse('static/test.html')
+
 @app.get("/api/webcam-proxy")
 async def webcam_proxy():
     """Proxy webcam stream to bypass domain restrictions"""
@@ -487,6 +492,12 @@ async def webcam_proxy():
                 from fastapi.responses import HTMLResponse
                 content = response.text
                 
+                # Debug: Print lines containing the files we're looking for 
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    if 'hdot-player.min.js' in line or 'app-3ce5f880.js' in line or 'hdot-player.min.css' in line:
+                        print(f"Line {i}: {line.strip()}")
+                
                 # Fix all relative URLs to be absolute HDOnTap URLs
                 content = content.replace('src="//', 'src="https://')
                 content = content.replace("src='//", "src='https://")
@@ -508,6 +519,15 @@ async def webcam_proxy():
                 # Fix any API calls or fetch requests
                 content = content.replace('"/api/', '"https://portal.hdontap.com/api/')
                 content = content.replace("'/api/", "'https://portal.hdontap.com/api/")
+                
+                # Replace specific files with local versions first (before general replacements)
+                content = content.replace('/assets/js/hdot-player/hdot-player.min.js', '/static/hdot-player.min.js')
+                content = content.replace('/scripts/app-3ce5f880.js', '/static/app-3ce5f880.js')
+                
+                # CSS file - keep pointing to HDOnTap since we don't have it locally  
+                content = content.replace('/assets/js/hdot-player/hdot-player.min.css', 'https://portal.hdontap.com/assets/js/hdot-player/hdot-player.min.css')
+                
+                # Fix remaining assets that we don't have locally
                 content = content.replace('"/assets/', '"https://portal.hdontap.com/assets/')
                 content = content.replace("'/assets/", "'https://portal.hdontap.com/assets/")
                 content = content.replace('"/scripts/', '"https://portal.hdontap.com/scripts/')

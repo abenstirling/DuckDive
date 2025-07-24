@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beach Cam Bypass Methods</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+        }
+        
+        .method {
+            background: #2d2d2d;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+        
+        .method h2 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+        
+        .stream-container {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            background: #000;
+            border-radius: 5px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+        
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .code {
+            background: #1e1e1e;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 10px 0;
+            border: 1px solid #444;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        .working { background: #2d5a2d; border: 1px solid #4CAF50; }
+        .blocked { background: #5a2d2d; border: 1px solid #f44336; }
+        .testing { background: #5a5a2d; border: 1px solid #FFC107; }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover { background: #45a049; }
+        
+        #proxyResult {
+            min-height: 300px;
+            background: #000;
+            border: 1px solid #444;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔓 Stream Bypass Methods - Live Tests</h1>
+    
+    <!-- Method 1: CORS Anywhere Proxy -->
+    <div class="method">
+        <h2>Method 1: CORS Anywhere Proxy</h2>
+        <div class="status testing">Testing CORS proxy bypass...</div>
+        
+        <div class="stream-container">
+            <iframe src="https://cors-anywhere.herokuapp.com/https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true"></iframe>
+        </div>
+        
+        <div class="code">
+&lt;iframe src="https://cors-anywhere.herokuapp.com/https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true"&gt;&lt;/iframe&gt;
+        </div>
+    </div>
+
+    <!-- Method 2: AllOrigins Proxy -->
+    <div class="method">
+        <h2>Method 2: AllOrigins Proxy</h2>
+        <div class="status testing">Testing AllOrigins proxy...</div>
+        
+        <div class="stream-container">
+            <iframe src="https://api.allorigins.win/raw?url=https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true"></iframe>
+        </div>
+        
+        <div class="code">
+&lt;iframe src="https://api.allorigins.win/raw?url=https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true"&gt;&lt;/iframe&gt;
+        </div>
+    </div>
+
+    <!-- Method 3: JavaScript Fetch + Blob URL -->
+    <div class="method">
+        <h2>Method 3: JavaScript Fetch with Blob URL</h2>
+        <div class="status testing">Testing JavaScript bypass...</div>
+        
+        <div class="stream-container" id="fetchContainer">
+            <div style="color: white; text-align: center; padding-top: 130px;">
+                <button onclick="loadViaFetch()">Load Stream via Fetch</button>
+            </div>
+        </div>
+        
+        <div class="code">
+async function loadViaFetch() {
+    try {
+        const response = await fetch('https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true', {
+            mode: 'no-cors'
+        });
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        document.getElementById('fetchFrame').src = blobUrl;
+    } catch (error) {
+        console.log('Fetch failed:', error);
+    }
+}
+        </div>
+    </div>
+
+    <!-- Method 4: Postmessage Communication -->
+    <div class="method">
+        <h2>Method 4: PostMessage Bridge</h2>
+        <div class="status testing">Testing PostMessage bridge...</div>
+        
+        <div class="stream-container">
+            <iframe id="bridgeFrame" src="data:text/html,
+                <html><body style='margin:0;padding:0;background:#000;'>
+                    <iframe id='stream' width='100%' height='100%' frameborder='0' 
+                            src='https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true'>
+                    </iframe>
+                    <script>
+                        window.addEventListener('message', function(e) {
+                            if (e.data.action === 'reload') {
+                                document.getElementById('stream').src = document.getElementById('stream').src;
+                            }
+                        });
+                    </script>
+                </body></html>
+            "></iframe>
+        </div>
+        
+        <button onclick="reloadBridge()">Reload Bridge</button>
+    </div>
+
+    <!-- Method 5: Base64 Data URL -->
+    <div class="method">
+        <h2>Method 5: Base64 Encoded Data URL</h2>
+        <div class="status testing">Testing Base64 bypass...</div>
+        
+        <div class="stream-container">
+            <iframe id="base64Frame"></iframe>
+        </div>
+        
+        <button onclick="loadBase64()">Load Base64 Version</button>
+        
+        <div class="code">
+const htmlContent = `&lt;iframe src="https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true" width="100%" height="100%" frameborder="0"&gt;&lt;/iframe&gt;`;
+const base64 = btoa(htmlContent);
+document.getElementById('base64Frame').src = 'data:text/html;base64,' + base64;
+        </div>
+    </div>
+
+    <!-- Method 6: Reverse Proxy via Service Worker -->
+    <div class="method">
+        <h2>Method 6: Service Worker Proxy</h2>
+        <div class="status testing">Testing Service Worker bypass...</div>
+        
+        <div class="stream-container" id="swContainer">
+            <div style="color: white; text-align: center; padding-top: 130px;">
+                <button onclick="registerSW()">Register Service Worker</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Method 7: Proxy via Your Own Domain -->
+    <div class="method">
+        <h2>Method 7: Custom Proxy Server</h2>
+        <div class="status testing">Testing custom proxy...</div>
+        
+        <div class="stream-container">
+            <iframe id="proxyResult"></iframe>
+        </div>
+        
+        <button onclick="testCustomProxy()">Test Custom Proxy</button>
+        
+        <div class="code">
+// PHP version (save as proxy.php)
+&lt;?php
+header('Access-Control-Allow-Origin: *');
+header('X-Frame-Options: ALLOWALL');
+$url = 'https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true';
+echo file_get_contents($url);
+?&gt;
+
+// Then use: &lt;iframe src="your-domain.com/proxy.php"&gt;&lt;/iframe&gt;
+        </div>
+    </div>
+
+    <script>
+        // Method 3: Fetch attempt
+        async function loadViaFetch() {
+            const container = document.getElementById('fetchContainer');
+            try {
+                container.innerHTML = '<iframe id="fetchFrame" width="100%" height="100%" frameborder="0"></iframe>';
+                
+                // Try different approaches
+                const url = 'https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true';
+                
+                // Approach 1: Direct iframe with fetch headers
+                const iframe = document.getElementById('fetchFrame');
+                iframe.src = url;
+                
+                setTimeout(() => {
+                    container.innerHTML = '<div style="color: #FFC107; text-align: center; padding-top: 130px;">Fetch method attempted - check if loaded</div>';
+                }, 3000);
+                
+            } catch (error) {
+                container.innerHTML = '<div style="color: #f44336; text-align: center; padding-top: 130px;">Fetch failed: ' + error.message + '</div>';
+            }
+        }
+
+        // Method 4: PostMessage bridge reload
+        function reloadBridge() {
+            const frame = document.getElementById('bridgeFrame');
+            frame.contentWindow.postMessage({action: 'reload'}, '*');
+        }
+
+        // Method 5: Base64 encoding
+        function loadBase64() {
+            const htmlContent = `
+                <html>
+                <head><style>body{margin:0;padding:0;}</style></head>
+                <body>
+                    <iframe src="https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true" 
+                            width="100%" height="100%" frameborder="0">
+                    </iframe>
+                </body>
+                </html>
+            `;
+            const base64 = btoa(htmlContent);
+            document.getElementById('base64Frame').src = 'data:text/html;base64,' + base64;
+        }
+
+        // Method 6: Service Worker
+        async function registerSW() {
+            if ('serviceWorker' in navigator) {
+                const swCode = `
+                    self.addEventListener('fetch', event => {
+                        if (event.request.url.includes('hdontap.com')) {
+                            event.respondWith(
+                                fetch(event.request, {
+                                    mode: 'no-cors'
+                                }).then(response => {
+                                    const headers = new Headers(response.headers);
+                                    headers.delete('X-Frame-Options');
+                                    headers.delete('Content-Security-Policy');
+                                    return new Response(response.body, {
+                                        status: response.status,
+                                        statusText: response.statusText,
+                                        headers: headers
+                                    });
+                                })
+                            );
+                        }
+                    });
+                `;
+                
+                const blob = new Blob([swCode], { type: 'application/javascript' });
+                const swUrl = URL.createObjectURL(blob);
+                
+                try {
+                    await navigator.serviceWorker.register(swUrl);
+                    document.getElementById('swContainer').innerHTML = `
+                        <iframe src="https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true" 
+                                width="100%" height="100%" frameborder="0">
+                        </iframe>
+                    `;
+                } catch (error) {
+                    document.getElementById('swContainer').innerHTML = '<div style="color: #f44336; text-align: center; padding-top: 130px;">Service Worker failed: ' + error.message + '</div>';
+                }
+            }
+        }
+
+        // Method 7: Test custom proxy
+        function testCustomProxy() {
+            const proxyUrls = [
+                'https://thingproxy.freeboard.io/fetch/https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true',
+                'https://yacdn.org/proxy/https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true',
+                'https://crossorigin.me/https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true'
+            ];
+            
+            // Try first available proxy
+            document.getElementById('proxyResult').src = proxyUrls[0];
+        }
+
+        // Auto-test on load
+        window.addEventListener('load', () => {
+            // Give some time for iframes to load, then check status
+            setTimeout(() => {
+                const iframes = document.querySelectorAll('iframe');
+                iframes.forEach((iframe, index) => {
+                    try {
+                        // This will throw an error if blocked by CORS
+                        iframe.contentWindow.location;
+                        console.log(`Method ${index + 1}: Potentially working`);
+                    } catch (error) {
+                        console.log(`Method ${index + 1}: Blocked - ${error.message}`);
+                    }
+                });
+            }, 5000);
+        });
+    </script>
+</body>
+</html>
