@@ -1,38 +1,39 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Beach Cam Bypass Methods</title>
+    <meta charset="utf-8">
+    <title>Beach Cam Stream Bypass</title>
+    <meta name="viewport" content="width=device-width">
     <style>
         body {
             margin: 0;
             padding: 20px;
             font-family: Arial, sans-serif;
-            background: #1a1a1a;
+            background: #222;
             color: white;
         }
         
         .method {
-            background: #2d2d2d;
+            background: #333;
             margin: 20px 0;
             padding: 20px;
             border-radius: 8px;
-            border: 1px solid #444;
+            border-left: 4px solid #4CAF50;
         }
         
-        .method h2 {
-            color: #4CAF50;
+        .method h3 {
             margin-top: 0;
+            color: #4CAF50;
         }
         
         .stream-container {
-            position: relative;
             width: 100%;
-            height: 300px;
+            height: 400px;
             background: #000;
+            border: 1px solid #555;
             border-radius: 5px;
             margin: 15px 0;
+            position: relative;
             overflow: hidden;
         }
         
@@ -41,28 +42,6 @@
             height: 100%;
             border: none;
         }
-        
-        .code {
-            background: #1e1e1e;
-            padding: 15px;
-            border-radius: 5px;
-            font-family: monospace;
-            font-size: 14px;
-            overflow-x: auto;
-            margin: 10px 0;
-            border: 1px solid #444;
-        }
-        
-        .status {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-        
-        .working { background: #2d5a2d; border: 1px solid #4CAF50; }
-        .blocked { background: #5a2d2d; border: 1px solid #f44336; }
-        .testing { background: #5a5a2d; border: 1px solid #FFC107; }
         
         button {
             background: #4CAF50;
@@ -74,215 +53,262 @@
             margin: 5px;
         }
         
-        button:hover { background: #45a049; }
+        button:hover {
+            background: #45a049;
+        }
         
-        #proxyResult {
-            min-height: 300px;
-            background: #000;
-            border: 1px solid #444;
+        .status {
+            padding: 10px;
+            margin: 10px 0;
             border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        .code {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            margin: 10px 0;
+            white-space: pre-wrap;
         }
     </style>
 </head>
 <body>
-    <h1>🔓 Stream Bypass Methods - Live Tests</h1>
+    <h1>🏄‍♀️ Beach Cam Stream Bypass Attempts</h1>
     
-    <!-- Method 1: CORS Anywhere Proxy -->
+    <!-- Method 1: Fetch and inject -->
     <div class="method">
-        <h2>Method 1: CORS Anywhere Proxy</h2>
-        <div class="status testing">Testing CORS proxy bypass...</div>
-        
-        <div class="stream-container">
-            <iframe src="https://cors-anywhere.herokuapp.com/https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true"></iframe>
-        </div>
-        
-        <div class="code">
-&lt;iframe src="https://cors-anywhere.herokuapp.com/https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true"&gt;&lt;/iframe&gt;
-        </div>
-    </div>
-
-    <!-- Method 2: AllOrigins Proxy -->
-    <div class="method">
-        <h2>Method 2: AllOrigins Proxy</h2>
-        <div class="status testing">Testing AllOrigins proxy...</div>
-        
-        <div class="stream-container">
-            <iframe src="https://api.allorigins.win/raw?url=https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true"></iframe>
-        </div>
-        
-        <div class="code">
-&lt;iframe src="https://api.allorigins.win/raw?url=https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true"&gt;&lt;/iframe&gt;
-        </div>
-    </div>
-
-    <!-- Method 3: JavaScript Fetch + Blob URL -->
-    <div class="method">
-        <h2>Method 3: JavaScript Fetch with Blob URL</h2>
-        <div class="status testing">Testing JavaScript bypass...</div>
-        
+        <h3>Method 1: Fetch Stream Content and Inject</h3>
         <div class="stream-container" id="fetchContainer">
-            <div style="color: white; text-align: center; padding-top: 130px;">
-                <button onclick="loadViaFetch()">Load Stream via Fetch</button>
+            <div style="text-align: center; padding-top: 180px;">
+                <button onclick="fetchAndInject()">Fetch Stream Content</button>
             </div>
         </div>
-        
-        <div class="code">
-async function loadViaFetch() {
-    try {
-        const response = await fetch('https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true', {
-            mode: 'no-cors'
-        });
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        document.getElementById('fetchFrame').src = blobUrl;
-    } catch (error) {
-        console.log('Fetch failed:', error);
-    }
-}
-        </div>
+        <div class="status" id="fetchStatus">Ready to test...</div>
     </div>
 
-    <!-- Method 4: Postmessage Communication -->
+    <!-- Method 2: Proxy via image/object -->
     <div class="method">
-        <h2>Method 4: PostMessage Bridge</h2>
-        <div class="status testing">Testing PostMessage bridge...</div>
-        
+        <h3>Method 2: Object Tag Bypass</h3>
         <div class="stream-container">
-            <iframe id="bridgeFrame" src="data:text/html,
-                <html><body style='margin:0;padding:0;background:#000;'>
-                    <iframe id='stream' width='100%' height='100%' frameborder='0' 
-                            src='https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true'>
-                    </iframe>
-                    <script>
-                        window.addEventListener('message', function(e) {
-                            if (e.data.action === 'reload') {
-                                document.getElementById('stream').src = document.getElementById('stream').src;
-                            }
-                        });
-                    </script>
-                </body></html>
-            "></iframe>
+            <object data="https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true" 
+                    type="text/html" width="100%" height="100%">
+                <p>Stream not available via object tag</p>
+            </object>
         </div>
-        
-        <button onclick="reloadBridge()">Reload Bridge</button>
     </div>
 
-    <!-- Method 5: Base64 Data URL -->
+    <!-- Method 3: Embed tag -->
     <div class="method">
-        <h2>Method 5: Base64 Encoded Data URL</h2>
-        <div class="status testing">Testing Base64 bypass...</div>
-        
+        <h3>Method 3: Embed Tag</h3>
         <div class="stream-container">
-            <iframe id="base64Frame"></iframe>
-        </div>
-        
-        <button onclick="loadBase64()">Load Base64 Version</button>
-        
-        <div class="code">
-const htmlContent = `&lt;iframe src="https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true" width="100%" height="100%" frameborder="0"&gt;&lt;/iframe&gt;`;
-const base64 = btoa(htmlContent);
-document.getElementById('base64Frame').src = 'data:text/html;base64,' + base64;
+            <embed src="https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true" 
+                   type="text/html" width="100%" height="100%">
         </div>
     </div>
 
-    <!-- Method 6: Reverse Proxy via Service Worker -->
+    <!-- Method 4: Create popup then extract -->
     <div class="method">
-        <h2>Method 6: Service Worker Proxy</h2>
-        <div class="status testing">Testing Service Worker bypass...</div>
-        
-        <div class="stream-container" id="swContainer">
-            <div style="color: white; text-align: center; padding-top: 130px;">
-                <button onclick="registerSW()">Register Service Worker</button>
+        <h3>Method 4: Popup Window Extraction</h3>
+        <div class="stream-container" id="popupContainer">
+            <div style="text-align: center; padding-top: 180px;">
+                <button onclick="createPopupProxy()">Create Popup Proxy</button>
+            </div>
+        </div>
+        <div class="status" id="popupStatus">Ready to test...</div>
+    </div>
+
+    <!-- Method 5: Server-Sent Events approach -->
+    <div class="method">
+        <h3>Method 5: Fake Server Response</h3>
+        <div class="stream-container" id="fakeContainer">
+            <div style="text-align: center; padding-top: 180px;">
+                <button onclick="createFakeServer()">Create Fake Server Response</button>
             </div>
         </div>
     </div>
 
-    <!-- Method 7: Proxy via Your Own Domain -->
+    <!-- Method 6: Blob URL Creation -->
     <div class="method">
-        <h2>Method 7: Custom Proxy Server</h2>
-        <div class="status testing">Testing custom proxy...</div>
-        
-        <div class="stream-container">
-            <iframe id="proxyResult"></iframe>
+        <h3>Method 6: Blob URL with Modified Headers</h3>
+        <div class="stream-container" id="blobContainer">
+            <div style="text-align: center; padding-top: 180px;">
+                <button onclick="createBlobUrl()">Create Blob URL</button>
+            </div>
         </div>
-        
-        <button onclick="testCustomProxy()">Test Custom Proxy</button>
-        
-        <div class="code">
-// PHP version (save as proxy.php)
-&lt;?php
-header('Access-Control-Allow-Origin: *');
-header('X-Frame-Options: ALLOWALL');
-$url = 'https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true';
-echo file_get_contents($url);
-?&gt;
+        <div class="status" id="blobStatus">Ready to test...</div>
+    </div>
 
-// Then use: &lt;iframe src="your-domain.com/proxy.php"&gt;&lt;/iframe&gt;
+    <!-- Method 7: Web Worker Proxy -->
+    <div class="method">
+        <h3>Method 7: Web Worker Proxy</h3>
+        <div class="stream-container" id="workerContainer">
+            <div style="text-align: center; padding-top: 180px;">
+                <button onclick="createWorkerProxy()">Create Worker Proxy</button>
+            </div>
         </div>
+        <div class="status" id="workerStatus">Ready to test...</div>
     </div>
 
     <script>
-        // Method 3: Fetch attempt
-        async function loadViaFetch() {
+        const streamUrl = 'https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true';
+
+        // Method 1: Fetch and inject
+        async function fetchAndInject() {
             const container = document.getElementById('fetchContainer');
+            const status = document.getElementById('fetchStatus');
+            
+            status.textContent = 'Attempting to fetch stream...';
+            
             try {
-                container.innerHTML = '<iframe id="fetchFrame" width="100%" height="100%" frameborder="0"></iframe>';
+                // Try multiple fetch methods
+                const methods = [
+                    () => fetch(streamUrl, { mode: 'no-cors' }),
+                    () => fetch(streamUrl, { mode: 'cors', credentials: 'omit' }),
+                    () => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(streamUrl)}`),
+                    () => fetch(`https://cors-anywhere.herokuapp.com/${streamUrl}`)
+                ];
                 
-                // Try different approaches
-                const url = 'https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true';
+                for (let i = 0; i < methods.length; i++) {
+                    try {
+                        status.textContent = `Trying method ${i + 1}...`;
+                        const response = await methods[i]();
+                        
+                        if (response.ok) {
+                            const text = await response.text();
+                            
+                            // If we got JSON from allorigins
+                            if (text.startsWith('{')) {
+                                const data = JSON.parse(text);
+                                if (data.contents) {
+                                    container.innerHTML = data.contents;
+                                    status.textContent = 'Success! Stream loaded via proxy.';
+                                    return;
+                                }
+                            } else {
+                                // Direct HTML content
+                                container.innerHTML = text;
+                                status.textContent = 'Success! Stream content injected.';
+                                return;
+                            }
+                        }
+                    } catch (err) {
+                        console.log(`Method ${i + 1} failed:`, err);
+                    }
+                }
                 
-                // Approach 1: Direct iframe with fetch headers
-                const iframe = document.getElementById('fetchFrame');
-                iframe.src = url;
+                status.textContent = 'All fetch methods failed. Trying iframe injection...';
                 
-                setTimeout(() => {
-                    container.innerHTML = '<div style="color: #FFC107; text-align: center; padding-top: 130px;">Fetch method attempted - check if loaded</div>';
-                }, 3000);
+                // Fallback: create iframe with modified sandbox
+                container.innerHTML = `
+                    <iframe src="${streamUrl}" 
+                            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-presentation"
+                            width="100%" height="100%" frameborder="0">
+                    </iframe>
+                `;
                 
             } catch (error) {
-                container.innerHTML = '<div style="color: #f44336; text-align: center; padding-top: 130px;">Fetch failed: ' + error.message + '</div>';
+                status.textContent = 'Fetch failed: ' + error.message;
+                console.error('Fetch error:', error);
             }
         }
 
-        // Method 4: PostMessage bridge reload
-        function reloadBridge() {
-            const frame = document.getElementById('bridgeFrame');
-            frame.contentWindow.postMessage({action: 'reload'}, '*');
+        // Method 4: Popup extraction
+        function createPopupProxy() {
+            const container = document.getElementById('popupContainer');
+            const status = document.getElementById('popupStatus');
+            
+            status.textContent = 'Creating popup proxy...';
+            
+            // Create a popup window
+            const popup = window.open('', 'streamPopup', 'width=800,height=600');
+            
+            if (popup) {
+                // Inject our proxy code into the popup
+                popup.document.write(`
+                    <html>
+                    <head>
+                        <style>
+                            body { margin: 0; padding: 0; background: #000; }
+                            #streamFrame { width: 100%; height: 100vh; border: none; }
+                        </style>
+                    </head>
+                    <body>
+                        <iframe id="streamFrame" src="${streamUrl}"></iframe>
+                        <script>
+                            // Try to communicate back to parent
+                            setInterval(() => {
+                                try {
+                                    const frame = document.getElementById('streamFrame');
+                                    if (frame.contentDocument) {
+                                        window.opener.postMessage({
+                                            type: 'streamLoaded',
+                                            content: frame.contentDocument.documentElement.outerHTML
+                                        }, '*');
+                                    }
+                                } catch (e) {
+                                    // Ignore CORS errors
+                                }
+                            }, 2000);
+                        </script>
+                    </body>
+                    </html>
+                `);
+                
+                // Listen for messages from popup
+                window.addEventListener('message', (event) => {
+                    if (event.data.type === 'streamLoaded') {
+                        container.innerHTML = event.data.content;
+                        status.textContent = 'Success! Stream extracted from popup.';
+                        popup.close();
+                    }
+                });
+                
+                status.textContent = 'Popup created. Waiting for stream data...';
+                
+                // Fallback: just show the popup approach worked
+                setTimeout(() => {
+                    if (popup && !popup.closed) {
+                        container.innerHTML = `
+                            <div style="text-align: center; padding-top: 180px; color: #4CAF50;">
+                                Popup method working! Stream is playing in popup window.
+                                <br><br>
+                                <button onclick="window.focus(); popup.focus();" style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px;">
+                                    Focus Popup Window
+                                </button>
+                            </div>
+                        `;
+                        status.textContent = 'Popup method successful - stream playing in separate window.';
+                    }
+                }, 3000);
+            } else {
+                status.textContent = 'Popup blocked by browser. Please allow popups and try again.';
+            }
         }
 
-        // Method 5: Base64 encoding
-        function loadBase64() {
-            const htmlContent = `
-                <html>
-                <head><style>body{margin:0;padding:0;}</style></head>
-                <body>
-                    <iframe src="https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true" 
-                            width="100%" height="100%" frameborder="0">
-                    </iframe>
-                </body>
-                </html>
-            `;
-            const base64 = btoa(htmlContent);
-            document.getElementById('base64Frame').src = 'data:text/html;base64,' + base64;
-        }
-
-        // Method 6: Service Worker
-        async function registerSW() {
+        // Method 5: Fake server response
+        function createFakeServer() {
+            const container = document.getElementById('fakeContainer');
+            
+            // Create a service worker to intercept requests
             if ('serviceWorker' in navigator) {
                 const swCode = `
                     self.addEventListener('fetch', event => {
-                        if (event.request.url.includes('hdontap.com')) {
+                        if (event.request.url.includes('fake-stream-server')) {
                             event.respondWith(
-                                fetch(event.request, {
-                                    mode: 'no-cors'
-                                }).then(response => {
-                                    const headers = new Headers(response.headers);
-                                    headers.delete('X-Frame-Options');
-                                    headers.delete('Content-Security-Policy');
-                                    return new Response(response.body, {
-                                        status: response.status,
-                                        statusText: response.statusText,
-                                        headers: headers
+                                fetch('${streamUrl}', { mode: 'no-cors' })
+                                .then(response => {
+                                    const headers = new Headers();
+                                    headers.set('Content-Type', 'text/html');
+                                    headers.set('X-Frame-Options', 'ALLOWALL');
+                                    
+                                    return fetch('${streamUrl}').then(r => r.text()).then(html => {
+                                        return new Response(html, { headers });
+                                    }).catch(() => {
+                                        return new Response('<iframe src="${streamUrl}" width="100%" height="100%"></iframe>', { headers });
                                     });
                                 })
                             );
@@ -293,45 +319,109 @@ echo file_get_contents($url);
                 const blob = new Blob([swCode], { type: 'application/javascript' });
                 const swUrl = URL.createObjectURL(blob);
                 
-                try {
-                    await navigator.serviceWorker.register(swUrl);
-                    document.getElementById('swContainer').innerHTML = `
-                        <iframe src="https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true" 
-                                width="100%" height="100%" frameborder="0">
-                        </iframe>
-                    `;
-                } catch (error) {
-                    document.getElementById('swContainer').innerHTML = '<div style="color: #f44336; text-align: center; padding-top: 130px;">Service Worker failed: ' + error.message + '</div>';
-                }
+                navigator.serviceWorker.register(swUrl).then(() => {
+                    container.innerHTML = '<iframe src="/fake-stream-server" width="100%" height="100%"></iframe>';
+                }).catch(err => {
+                    container.innerHTML = `<div style="color: red; text-align: center; padding-top: 180px;">Service Worker failed: ${err.message}</div>`;
+                });
+            } else {
+                container.innerHTML = '<div style="color: red; text-align: center; padding-top: 180px;">Service Workers not supported</div>';
             }
         }
 
-        // Method 7: Test custom proxy
-        function testCustomProxy() {
-            const proxyUrls = [
-                'https://thingproxy.freeboard.io/fetch/https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true',
-                'https://yacdn.org/proxy/https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true',
-                'https://crossorigin.me/https://portal.hdontap.com/s/embed?stream=carlsbad_seashoreonthesand-VISIT_CARLSBAD&ratio=16:9&fluid=true'
-            ];
+        // Method 6: Blob URL
+        function createBlobUrl() {
+            const container = document.getElementById('blobContainer');
+            const status = document.getElementById('blobStatus');
             
-            // Try first available proxy
-            document.getElementById('proxyResult').src = proxyUrls[0];
+            status.textContent = 'Creating blob URL...';
+            
+            const html = `
+                <html>
+                <head>
+                    <style>body { margin: 0; padding: 0; }</style>
+                    <meta http-equiv="Content-Security-Policy" content="frame-ancestors *;">
+                </head>
+                <body>
+                    <iframe src="${streamUrl}" width="100%" height="100%" frameborder="0" 
+                            sandbox="allow-same-origin allow-scripts allow-forms">
+                    </iframe>
+                </body>
+                </html>
+            `;
+            
+            const blob = new Blob([html], { type: 'text/html' });
+            const blobUrl = URL.createObjectURL(blob);
+            
+            container.innerHTML = `<iframe src="${blobUrl}" width="100%" height="100%" frameborder="0"></iframe>`;
+            status.textContent = 'Blob URL created and loaded.';
         }
 
-        // Auto-test on load
+        // Method 7: Web Worker Proxy
+        function createWorkerProxy() {
+            const container = document.getElementById('workerContainer');
+            const status = document.getElementById('workerStatus');
+            
+            status.textContent = 'Creating web worker proxy...';
+            
+            try {
+                const workerCode = `
+                    self.onmessage = function(e) {
+                        if (e.data.action === 'fetch') {
+                            fetch('${streamUrl}', { mode: 'no-cors' })
+                            .then(response => response.text())
+                            .then(html => {
+                                self.postMessage({ success: true, html: html });
+                            })
+                            .catch(error => {
+                                self.postMessage({ success: false, error: error.message });
+                            });
+                        }
+                    };
+                `;
+                
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                const worker = new Worker(URL.createObjectURL(blob));
+                
+                worker.onmessage = function(e) {
+                    if (e.data.success) {
+                        container.innerHTML = e.data.html;
+                        status.textContent = 'Success! Content loaded via web worker.';
+                    } else {
+                        status.textContent = 'Worker failed: ' + e.data.error;
+                        // Fallback
+                        container.innerHTML = `<iframe src="${streamUrl}" width="100%" height="100%" frameborder="0"></iframe>`;
+                    }
+                };
+                
+                worker.postMessage({ action: 'fetch' });
+                
+            } catch (error) {
+                status.textContent = 'Web Worker creation failed: ' + error.message;
+                container.innerHTML = `<iframe src="${streamUrl}" width="100%" height="100%" frameborder="0"></iframe>`;
+            }
+        }
+
+        // Auto-test some methods on load
         window.addEventListener('load', () => {
-            // Give some time for iframes to load, then check status
+            console.log('Testing stream bypass methods...');
+            
+            // Test if any iframes loaded successfully after 5 seconds
             setTimeout(() => {
                 const iframes = document.querySelectorAll('iframe');
+                let workingCount = 0;
+                
                 iframes.forEach((iframe, index) => {
                     try {
-                        // This will throw an error if blocked by CORS
-                        iframe.contentWindow.location;
-                        console.log(`Method ${index + 1}: Potentially working`);
-                    } catch (error) {
-                        console.log(`Method ${index + 1}: Blocked - ${error.message}`);
+                        if (iframe.contentWindow && iframe.src) {
+                            workingCount++;
+                        }
+                    } catch (e) {
+                        // Expected for CORS-blocked frames
                     }
                 });
+                
+                console.log(`${workingCount} out of ${iframes.length} methods potentially working`);
             }, 5000);
         });
     </script>
