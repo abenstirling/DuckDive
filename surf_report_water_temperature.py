@@ -3,6 +3,61 @@ import datetime
 from surfpy.buoystation import BuoyStation
 import surfpy.surfpy as surfpy
 
+def get_water_temp_forecast(wave_location, hours_forecast=1):
+    """
+    Get water temperature data for a specific location.
+    
+    Args:
+        wave_location: surfpy.Location object with location details
+        hours_forecast: number of hours (currently only returns current temp)
+    
+    Returns:
+        List of tuples: [(water_temp, hour), ...] - currently just one reading
+    """
+    try:
+        print("Fetching water temperature from Torrey Pines Outer buoy (46225)...")
+        
+        # Use Torrey Pines Outer buoy for data
+        torrey_pines_buoy = BuoyStation('46225', wave_location)
+        
+        # Fetch latest reading
+        latest_reading = torrey_pines_buoy.fetch_latest_reading()
+        
+        if latest_reading and hasattr(latest_reading, 'water_temperature') and latest_reading.water_temperature is not None:
+            water_temp_f = latest_reading.water_temperature
+            
+            # Check for valid data
+            if water_temp_f == water_temp_f and water_temp_f != -999:  # Not NaN and not missing
+                # Return as list of tuples with hour 0 (current reading)
+                return [(water_temp_f, 0)]
+        
+        # Try backup stations
+        backup_stations = [
+            ('46232', 'Point Loma'),
+            ('46086', 'San Clemente Basin'),
+            ('46069', 'South Santa Rosa Island')
+        ]
+        
+        for station_id, station_name in backup_stations:
+            try:
+                print(f"Trying backup station {station_id} ({station_name})...")
+                buoy = BuoyStation(station_id, wave_location)
+                latest_reading = buoy.fetch_latest_reading()
+                
+                if latest_reading and hasattr(latest_reading, 'water_temperature'):
+                    water_temp_f = latest_reading.water_temperature
+                    if water_temp_f == water_temp_f and water_temp_f != -999:  # Valid data
+                        return [(water_temp_f, 0)]
+                        
+            except Exception as e:
+                print(f"Error with backup station {station_id}: {e}")
+                continue
+                
+    except Exception as e:
+        print(f"Error fetching water temperature: {e}")
+        
+    return []
+
 def get_water_temperature():
     """Get current water temperature from Torrey Pines Outer buoy (46225)"""
     try:
