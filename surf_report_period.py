@@ -2,20 +2,20 @@ import sys
 import matplotlib.pyplot as plt
 import surfpy.surfpy as surfpy
 
-def get_surf_forecast(wave_location, num_hours_to_forecast):
+def get_period_forecast(wave_location, num_hours_to_forecast):
     """
-    Get surf forecast data for a given location and time period.
+    Get wave period forecast data for a given location and time period.
     
     Args:
         wave_location: surfpy.Location object with depth, angle, and slope set
         num_hours_to_forecast: Number of hours to forecast (e.g., 168 for 7 days)
     
     Returns:
-        List of tuples: [(high, low, avg, hour_#), ...] for each hour from 0 to num_hours_to_forecast
+        List of tuples: [(period_seconds, hour_#), ...] for each hour from 0 to num_hours_to_forecast
     """
     global_wave_model = surfpy.us_west_coast_gfs_wave_model()
 
-    print('Fetching GFS Wave Data')
+    print('Fetching GFS Wave Data for period forecast')
     wave_grib_data = global_wave_model.fetch_grib_datas(0, num_hours_to_forecast, wave_location)
     raw_wave_data = global_wave_model.parse_grib_datas(wave_location, wave_grib_data)
     if raw_wave_data:
@@ -24,36 +24,31 @@ def get_surf_forecast(wave_location, num_hours_to_forecast):
         print('Failed to fetch wave forecast data')
         return None
 
-    # Show breaking wave heights
+    # Process the wave data
     for dat in data:
         dat.solve_breaking_wave_heights(wave_location)
         dat.change_units(surfpy.units.Units.english)
 
-    maxs = [x.maximum_breaking_height for x in data]
-    mins = [x.minimum_breaking_height for x in data]
-    summary = [x.wave_summary.wave_height for x in data]
+    # Extract period data
+    periods = [x.wave_summary.period for x in data]
     times = [x.date for x in data]
 
     # Plot disabled for backend use
-    # plt.plot(times, maxs, c='green', label='Max')
-    # plt.plot(times, mins, c='blue', label='Min')
-    # plt.plot(times, summary, c='red', label='Average')
+    # plt.plot(times, periods, c='purple', label='Wave Period', linewidth=2)
     # plt.xlabel('Hours')
-    # plt.ylabel('Breaking Wave Height (ft)')
+    # plt.ylabel('Wave Period (seconds)')
     # plt.grid(True)
     # plt.legend()
-    # plt.title('GFS Wave Global: ' + global_wave_model.latest_model_time().strftime('%d/%m/%Y %Hz'))
+    # plt.title('GFS Wave Period: ' + global_wave_model.latest_model_time().strftime('%d/%m/%Y %Hz'))
     # plt.show()
 
-    # Build the result list with (high, low, avg, hour_#) format
+    # Build the result list with (period, hour_#) format
     # Model returns data every 3 hours, so multiply index by 3
     result = []
     for i, dat in enumerate(data):
-        high = dat.maximum_breaking_height
-        low = dat.minimum_breaking_height
-        avg = dat.wave_summary.wave_height
+        period = dat.wave_summary.period
         hour = i * 3  # Every 3 hours: 0, 3, 6, 9, 12, etc.
-        result.append((high, low, avg, hour))
+        result.append((period, hour))
     
     return result
 
@@ -65,11 +60,12 @@ if __name__=='__main__':
     wave_location.slope = 0.02
     
     num_hours_to_forecast = 168  # 7 day forecast
-    forecast_data = get_surf_forecast(wave_location, num_hours_to_forecast)
+    forecast_data = get_period_forecast(wave_location, num_hours_to_forecast)
     
+    # Show all forecast data
     if forecast_data:
-        for high, low, avg, hour in forecast_data[:10]:  # Show first 10 hours as example
-            print(f"Hour {hour}: High={high:.1f}ft, Low={low:.1f}ft, Avg={avg:.1f}ft")
+        for period, hour in forecast_data:
+            print(f"Hour {hour}: Period={period:.1f}s")
     else:
         print('Failed to fetch wave forecast data')
         sys.exit(1)
