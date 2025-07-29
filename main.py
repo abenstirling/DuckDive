@@ -1,957 +1,466 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse
-import sys
 import os
-from datetime import datetime, timedelta
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
+
+load_dotenv()
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+import random
+from supabase import create_client, Client
+import uvicorn
+from datetime import datetime
 import asyncio
-import sqlite3
-import json
-from typing import Optional, List
+from typing import Dict, Any
+import logging
 
-# Add surfpy to path
-sys.path.append('./surfpy')
-try:
-    import surfpy
-    from surfpy.weatherapi import WeatherApi
-    SURFPY_AVAILABLE = True
-    print("SurfPy loaded successfully")
-except ImportError as e:
-    print(f"SurfPy not available: {e}")
-    SURFPY_AVAILABLE = False
-    # Create mock classes
-    class MockWeatherApi:
-        @staticmethod
-        def fetch_hourly_forecast(location):
-            return None
-    WeatherApi = MockWeatherApi
+app = FastAPI()
 
-app = FastAPI(title="Tamarack Surf Forecast")
+# Supabase client setup
+supabase: Client = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_ANON_KEY")
+)
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Database setup
-DB_PATH = "tamarack_cache.db"
-
-def init_db():
-    """Initialize SQLite database for caching"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS wave_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            data TEXT NOT NULL,
-            expires_at TEXT NOT NULL
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tide_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            data TEXT NOT NULL,
-            expires_at TEXT NOT NULL
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS wind_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            data TEXT NOT NULL,
-            expires_at TEXT NOT NULL
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
-
-def get_cached_data(table_name: str) -> Optional[dict]:
-    """Get cached data if still valid"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    now = datetime.now().isoformat()
-    cursor.execute(f'''
-        SELECT data FROM {table_name} 
-        WHERE expires_at > ? 
-        ORDER BY timestamp DESC 
-        LIMIT 1
-    ''', (now,))
-    
-    result = cursor.fetchone()
-    conn.close()
-    
-    if result:
-        return json.loads(result[0])
-    return None
-
-def cache_data(table_name: str, data: dict, hours_valid: int = 1):
-    """Cache data with expiration"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    now = datetime.now()
-    expires = now + timedelta(hours=hours_valid)
-    
-    # Clear old data
-    cursor.execute(f'DELETE FROM {table_name} WHERE expires_at <= ?', (now.isoformat(),))
-    
-    # Insert new data
-    cursor.execute(f'''
-        INSERT INTO {table_name} (timestamp, data, expires_at)
-        VALUES (?, ?, ?)
-    ''', (now.isoformat(), json.dumps(data), expires.isoformat()))
-    
-    conn.commit()
-    conn.close()
-
-# Tamarack location
-TAMARACK = {
-    "name": "Tamarack",
-    "lat": 33.146635,
-    "lng": -117.345818,
-    "county": "San Diego"
-}
-
-async def get_tamarack_wave_forecast():
-    """Fetch wave forecast with caching"""
-    # Try cache first
-    cached = get_cached_data('wave_data')
-    if cached:
-        print("Using cached wave data")
-        return cached
-    
-    if not SURFPY_AVAILABLE:
-        print("SurfPy not available, using fallback wave data")
-        return get_fallback_wave_data()
-    
+# Load surf spots from CSV
+def load_surf_spots():
+    """Load surf spots from CSV file"""
+    spots = {}
     try:
-        print(f"Fetching fresh Tamarack wave data...")
-        location = surfpy.Location(TAMARACK['lat'], TAMARACK['lng'], altitude=30.0, name='Tamarack')
-        location.depth = 30.0
-        location.angle = 225.0
-        location.slope = 0.02
-        
-        wave_model = surfpy.wavemodel.us_west_coast_gfs_wave_model()
-        wave_grib_data = wave_model.fetch_grib_datas(0, 120)  # 5 days
-        
-        if wave_grib_data:
-            raw_wave_data = wave_model.parse_grib_datas(location, wave_grib_data)
-            if raw_wave_data:
-                data = wave_model.to_buoy_data(raw_wave_data)
-                if data:
-                    for dat in data:
-                        dat.solve_breaking_wave_heights(location)
-                        dat.change_units(surfpy.units.Units.english)
-                    
-                    # Convert to serializable format
-                    wave_list = []
-                    for d in data:
-                        wave_list.append({
-                            'time': d.date.isoformat(),
-                            'height': round(d.wave_summary.wave_height, 1),
-                            'period': round(d.wave_summary.period, 1),
-                            'direction': d.wave_summary.compass_direction
-                        })
-                    
-                    # Cache for 1 hour
-                    cache_data('wave_data', wave_list, 1)
-                    print(f"Cached {len(wave_list)} wave data points")
-                    return wave_list
-        
-        # Fallback: Return mock data if GRIB processing fails
-        print("GRIB processing failed, using fallback data")
-        return get_fallback_wave_data()
-        
-    except Exception as e:
-        print(f"Error fetching wave data: {e}")
-        # Return fallback data on any error
-        return get_fallback_wave_data()
-
-def get_fallback_wave_data():
-    """Return mock wave data when real data is unavailable"""
-    from datetime import datetime, timedelta
-    import pytz
-    
-    # Generate 5 days of mock data
-    wave_list = []
-    utc = pytz.UTC
-    base_time = datetime.now(utc)
-    
-    for i in range(120):  # 5 days, every hour
-        time = base_time + timedelta(hours=i)
-        # Mock wave heights between 1-4 feet with some variation
-        import random
-        height = round(2.0 + random.uniform(-1.0, 2.0), 1)
-        period = round(8 + random.uniform(-2, 4), 1)
-        
-        wave_list.append({
-            'time': time.isoformat(),
-            'height': max(0.5, height),  # Ensure minimum 0.5ft
-            'period': max(6.0, period),   # Ensure minimum 6s period
-            'direction': 'SW'  # Default direction
-        })
-    
-    return wave_list
-
-async def get_tamarack_tide_forecast():
-    """Fetch tide forecast with caching"""
-    # Try cache first
-    cached = get_cached_data('tide_data')
-    if cached:
-        print("Using cached tide data")
-        return cached
-    
-    if not SURFPY_AVAILABLE:
-        print("SurfPy not available, using fallback tide data")
-        return get_fallback_tide_data()
-    
-    try:
-        print("Fetching fresh Tamarack tide data...")
-        stations = surfpy.TideStations()
-        stations.fetch_stations()
-        
-        san_diego_station = None
-        for station in stations.stations:
-            if hasattr(station, 'station_id') and station.station_id == '9410170':
-                san_diego_station = station
-                break
-        
-        if san_diego_station:
-            start_date = datetime.now()
-            end_date = start_date + timedelta(days=5)
-            
-            tidal_events, tidal_data = san_diego_station.fetch_tide_data(
-                start_date, 
-                end_date, 
-                interval=surfpy.TideStation.DataInterval.high_low,
-                unit=surfpy.units.Units.english
-            )
-            
-            if tidal_events:
-                # Convert to serializable format
-                tide_list = []
-                for event in tidal_events:
-                    tide_list.append({
-                        'time': event.date.isoformat(),
-                        'height': round(event.water_level, 1),
-                        'type': 'High' if event.tidal_event == surfpy.TideEvent.TidalEventType.high_tide else 'Low'
-                    })
-                
-                # Cache for 6 hours
-                cache_data('tide_data', tide_list, 6)
-                print(f"Cached {len(tide_list)} tide data points")
-                return tide_list
-        
-        return get_fallback_tide_data()
-    except Exception as e:
-        print(f"Error fetching tide data: {e}")
-        return get_fallback_tide_data()
-
-def get_fallback_tide_data():
-    """Return mock tide data when real data is unavailable"""
-    from datetime import datetime, timedelta
-    import pytz
-    
-    # Generate 5 days of mock tide data
-    tide_list = []
-    utc = pytz.UTC
-    base_time = datetime.now(utc).replace(hour=6, minute=0, second=0, microsecond=0)
-    
-    # Typical tide pattern: 2 highs and 2 lows per day, roughly 6 hours apart
-    tide_heights = [5.8, 0.2, 5.6, 0.4]  # High, Low, High, Low
-    tide_types = ['High', 'Low', 'High', 'Low']
-    
-    for day in range(5):
-        for i in range(4):  # 4 tides per day
-            time = base_time + timedelta(days=day, hours=i*6 + day*0.8)  # Slight daily shift
-            tide_list.append({
-                'time': time.isoformat(),
-                'height': round(tide_heights[i] + (day * 0.1), 1),  # Slight variation
-                'type': tide_types[i]
-            })
-    
-    return tide_list
-
-async def get_tamarack_wind_forecast():
-    """Fetch wind forecast from NWS with caching"""
-    # Try cache first
-    cached = get_cached_data('wind_data')
-    if cached:
-        print("Using cached wind data")
-        return cached
-    
-    if not SURFPY_AVAILABLE:
-        print("SurfPy not available, using fallback wind data")
-        return get_fallback_wind_data()
-    
-    try:
-        print("Fetching fresh wind forecast from NWS...")
-        location = surfpy.Location(TAMARACK['lat'], TAMARACK['lng'], altitude=30.0, name='Tamarack')
-        
-        # Fetch hourly wind forecast using WeatherApi
-        wind_buoy_data = WeatherApi.fetch_hourly_forecast(location)
-        
-        if wind_buoy_data:
-            # Convert to serializable format
-            wind_list = []
-            for data_point in wind_buoy_data:
-                # Include all data points, even with wind_speed=0
-                if hasattr(data_point, 'wind_speed') and data_point.wind_speed is not None:
-                    wind_direction = data_point.wind_compass_direction or 'Variable'
-                    # Handle empty wind direction
-                    if not wind_direction or wind_direction.strip() == '':
-                        wind_direction = 'Variable'
-                    
-                    wind_list.append({
-                        'time': data_point.date.isoformat(),
-                        'wind_speed_mph': round(data_point.wind_speed, 1),
-                        'wind_speed_kts': round(data_point.wind_speed * 0.868976, 1),
-                        'wind_direction': wind_direction,
-                        'wind_direction_deg': data_point.wind_direction if hasattr(data_point, 'wind_direction') else None,
-                        'air_temperature': data_point.air_temperature if hasattr(data_point, 'air_temperature') else None,
-                        'short_forecast': data_point.short_forecast if hasattr(data_point, 'short_forecast') else None
-                    })
-            
-            if wind_list:
-                # Cache for 1 hour
-                cache_data('wind_data', wind_list, 1)
-                print(f"Cached {len(wind_list)} wind data points")
-                return wind_list
-        
-        return get_fallback_wind_data()
-    except Exception as e:
-        print(f"Error fetching wind forecast: {e}")
-        import traceback
-        traceback.print_exc()
-        return get_fallback_wind_data()
-
-def get_fallback_wind_data():
-    """Return mock wind data when real data is unavailable"""
-    from datetime import datetime, timedelta
-    import pytz
-    import random
-    
-    # Generate 5 days of mock wind data
-    wind_list = []
-    utc = pytz.UTC
-    base_time = datetime.now(utc)
-    
-    directions = ['NW', 'W', 'SW', 'S', 'SE', 'E', 'NE', 'N']
-    
-    for i in range(120):  # 5 days, every hour
-        time = base_time + timedelta(hours=i)
-        # Mock wind speeds between 3-15 mph with some variation
-        speed = round(8.0 + random.uniform(-5.0, 7.0), 1)
-        speed = max(0.0, speed)  # Ensure non-negative
-        
-        wind_list.append({
-            'time': time.isoformat(),
-            'wind_speed_mph': speed,
-            'wind_speed_kts': round(speed * 0.868976, 1),
-            'wind_direction': random.choice(directions),
-            'wind_direction_deg': None,
-            'air_temperature': 70 + random.randint(-10, 10),
-            'short_forecast': 'Clear' if speed < 10 else 'Breezy'
-        })
-    
-    return wind_list
-
-def format_tamarack_forecast(wave_data, tide_data=None):
-    """Format forecast data for display"""
-    if not wave_data:
-        return []
-    
-    # Organize tide data by date
-    daily_tides = {}
-    if tide_data:
-        import pytz
-        local_tz = pytz.timezone('America/Los_Angeles')
-        
-        for event in tide_data:
-            event_time = datetime.fromisoformat(event['time'])
-            # Convert to local timezone for grouping by local date
-            if event_time.tzinfo is not None:
-                local_time = event_time.astimezone(local_tz)
-            else:
-                local_time = event_time
-            
-            event_date = local_time.date()
-            if event_date not in daily_tides:
-                daily_tides[event_date] = []
-            daily_tides[event_date].append({
-                "time": local_time.strftime("%I:%M %p"),
-                "height": event['height'],
-                "type": event['type']
-            })
-    
-    # Group wave data by day
-    daily_forecasts = []
-    current_date = None
-    daily_data = []
-    
-    import pytz
-    local_tz = pytz.timezone('America/Los_Angeles')
-    
-    for wave_point in wave_data:
-        wave_time = datetime.fromisoformat(wave_point['time'])
-        # Convert to local timezone for grouping by local date
-        if wave_time.tzinfo is not None:
-            local_wave_time = wave_time.astimezone(local_tz)
-        else:
-            local_wave_time = wave_time
-        wave_date = local_wave_time.date()
-        
-        if current_date != wave_date:
-            if daily_data:
-                # Process previous day
-                heights = [d['height'] for d in daily_data]
-                periods = [d['period'] for d in daily_data]
-                
-                avg_height = sum(heights) / len(heights)
-                avg_period = sum(periods) / len(periods)
-                direction = daily_data[0]['direction']
-                
-                # Quality rating
-                if avg_height >= 4.0 and avg_period >= 12:
-                    quality, quality_color = "Good", "green"
-                elif avg_height >= 2.5 and avg_period >= 10:
-                    quality, quality_color = "Fair", "yellow"
-                elif avg_height >= 1.5:
-                    quality, quality_color = "Poor-Fair", "orange"
-                else:
-                    quality, quality_color = "Poor", "red"
-                
-                forecast_day = {
-                    "date": current_date.strftime("%Y-%m-%d"),
-                    "day_name": current_date.strftime("%A"),
-                    "wave_height_avg": round(avg_height, 1),
-                    "wave_period": round(avg_period, 0),
-                    "wave_direction": direction,
-                    "quality": quality,
-                    "quality_color": quality_color,
-                    "tides": daily_tides.get(current_date, [])
+        import csv
+        with open('surf_spots.csv', 'r') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                name = row['name'].strip().strip("'\"").lower()
+                spots[name] = {
+                    "name": row['name'].strip().strip("'\""),
+                    "lat": float(row['location_n'].strip()),
+                    "lon": -float(row['location_w'].strip()),  # Convert to negative for west
+                    "depth": float(row['depth'].strip()),
+                    "angle": float(row['angle'].strip()),
+                    "stream_link": row['stream_link'].strip() if row['stream_link'].strip().lower() != 'null' else None
                 }
-                
-                daily_forecasts.append(forecast_day)
-            
-            current_date = wave_date
-            daily_data = [wave_point]
-        else:
-            daily_data.append(wave_point)
+    except Exception as e:
+        logging.error(f"Error loading surf spots: {e}")
+        # Fallback to hardcoded spots
+        spots = {
+            "tamarack": {"name": "Tamarack", "lat": 33.0742, "lon": -117.3095, "depth": 25.0, "angle": 225.0, "stream_link": None}
+        }
+    return spots
+
+SURF_SPOTS = load_surf_spots()
+
+def get_current_conditions(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract current conditions from forecast data"""
+    current = {}
     
-    return daily_forecasts[:5]
+    # Get current conditions from the new data structure
+    current['wave_height'] = data.get('current_wave_height', 'Loading...')
+    current['tide_height'] = data.get('current_tide_height', 'Loading...')
+    current['water_temp'] = data.get('water_temp_f', 'Loading...')
+    current['wind_speed'] = data.get('wind_speed_mph', 'Loading...')
+    current['wind_direction'] = data.get('wind_direction_deg', 'Loading...')
+    current['period'] = data.get('current_period', 'Loading...')
+    
+    return current
+
+def get_html_template(spot: str, data: Dict[str, Any]) -> str:
+    """Generate HTML page for a surf spot"""
+    current = get_current_conditions(data)
+    wave_height = current['wave_height']
+    tide_height = current['tide_height'] 
+    water_temp = current['water_temp']
+    wind_speed = current['wind_speed']
+    wind_direction = current['wind_direction']
+    period = current['period']
+    
+    # Prepare forecast data for charts - use new comprehensive data
+    wave_forecast_168h = data.get('wave_forecast_168h', [])
+    period_forecast_168h = data.get('period_forecast_168h', [])
+    tide_forecast_7d = data.get('tide_forecast_7d', [])
+    
+    # Convert wave data for chart (use average wave height)
+    wave_chart_data = [[entry[3], entry[2]] for entry in wave_forecast_168h] if wave_forecast_168h else []
+    
+    # Convert period data for chart  
+    period_chart_data = [[entry[1], entry[0]] for entry in period_forecast_168h] if period_forecast_168h else []
+    
+    # Convert tide data for chart (extract height and create hourly approximation)
+    tide_chart_data = []
+    if tide_forecast_7d:
+        for i, (height, tide_type, dt) in enumerate(tide_forecast_7d[:24]):  # First 24 entries
+            tide_chart_data.append([i*3, height])  # Approximate hourly from tide events
+    
+    # Get stream link
+    stream_link = data.get('stream_link')
+    
+    # Create dropdown options
+    dropdown_options = ""
+    for spot_name, spot_info in SURF_SPOTS.items():
+        selected = "selected" if spot_name == spot.lower() else ""
+        display_name = spot_info.get('name', spot_name.title())
+        dropdown_options += f'<option value="{spot_name}" {selected}>{display_name}</option>'
+    
+    return f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Duck Dive - {spot.title()}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta http-equiv="refresh" content="300">
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-cyan-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-5xl font-bold text-blue-900 mb-4">🏄‍♂️ Duck Dive</h1>
+            <div class="mb-4">
+                <select id="spotSelector" class="px-6 py-3 border-2 border-blue-200 rounded-xl bg-white shadow-lg text-lg font-medium">
+                    {dropdown_options}
+                </select>
+            </div>
+            <h2 class="text-3xl font-semibold text-blue-700">{spot.title()}</h2>
+            {'<p class="text-blue-600 mt-2"><a href="' + stream_link + '" target="_blank" class="underline hover:text-blue-800">📹 Live Stream</a></p>' if stream_link else ''}
+        </div>
+        
+        <!-- Current Conditions Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl mx-auto mb-8">
+            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-blue-500">
+                <div class="text-3xl font-bold text-blue-600 mb-2">{wave_height}</div>
+                <div class="text-gray-600 font-medium">Wave Height (ft)</div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-purple-500">
+                <div class="text-3xl font-bold text-purple-600 mb-2">{period}</div>
+                <div class="text-gray-600 font-medium">Period (sec)</div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-green-500">
+                <div class="text-3xl font-bold text-green-600 mb-2">{tide_height}</div>
+                <div class="text-gray-600 font-medium">Tide Height (ft)</div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-cyan-500">
+                <div class="text-3xl font-bold text-cyan-600 mb-2">{wind_speed}</div>
+                <div class="text-gray-600 font-medium">Wind Speed (mph)</div>
+                <div class="text-sm text-gray-500 mt-1">{wind_direction}°</div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-orange-500">
+                <div class="text-3xl font-bold text-orange-600 mb-2">{water_temp}</div>
+                <div class="text-gray-600 font-medium">Water Temp (°F)</div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-indigo-500">
+                <div class="text-2xl font-bold text-indigo-600 mb-2">📊</div>
+                <div class="text-gray-600 font-medium">7-Day Forecast</div>
+                <div class="text-sm text-gray-500 mt-1">Available</div>
+            </div>
+        </div>
+        
+        <!-- Forecast Charts -->
+        <div class="max-w-6xl mx-auto mb-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Wave Height Forecast -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">Wave Height (48h)</h3>
+                    <canvas id="waveChart" width="400" height="300"></canvas>
+                </div>
+                
+                <!-- Wave Period Forecast -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">Wave Period (48h)</h3>
+                    <canvas id="periodChart" width="400" height="300"></canvas>
+                </div>
+                
+                <!-- Tide Height Forecast -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">Tide Height (24h)</h3>
+                    <canvas id="tideChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="text-center mt-8 text-gray-500 text-sm">
+            <p class="font-medium">Updates every 5 minutes • 7-Day Comprehensive Forecast</p>
+            <p>Last updated: {datetime.now().strftime('%I:%M %p on %B %d, %Y')}</p>
+        </div>
+    </div>
+    
+    <script>
+        // Spot selector
+        document.getElementById('spotSelector').addEventListener('change', function() {{
+            const selectedSpot = this.value;
+            if (selectedSpot) {{
+                window.location.href = '/' + selectedSpot;
+            }}
+        }});
+        
+        // Chart configuration
+        const chartConfig = {{
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {{
+                y: {{
+                    beginAtZero: true,
+                    grid: {{ color: 'rgba(0,0,0,0.1)' }},
+                    ticks: {{ color: '#6B7280' }}
+                }},
+                x: {{
+                    grid: {{ color: 'rgba(0,0,0,0.1)' }},
+                    ticks: {{ color: '#6B7280' }}
+                }}
+            }},
+            plugins: {{
+                legend: {{ display: false }}
+            }}
+        }};
+        
+        // Wave height chart
+        const waveData = {wave_chart_data};
+        if (waveData.length > 0) {{
+            const waveChart24h = waveData.slice(0, 16); // 48 hours (every 3 hours)
+            const waveCtx = document.getElementById('waveChart').getContext('2d');
+            new Chart(waveCtx, {{
+                type: 'line',
+                data: {{
+                    labels: waveChart24h.map(d => d[0] + 'h'),
+                    datasets: [{{
+                        data: waveChart24h.map(d => d[1]),
+                        borderColor: 'rgb(37, 99, 235)',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: 'rgb(37, 99, 235)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }}]
+                }},
+                options: chartConfig
+            }});
+        }}
+        
+        // Wave period chart
+        const periodData = {period_chart_data};
+        if (periodData.length > 0) {{
+            const periodChart24h = periodData.slice(0, 16); // 48 hours
+            const periodCtx = document.getElementById('periodChart').getContext('2d');
+            new Chart(periodCtx, {{
+                type: 'line',
+                data: {{
+                    labels: periodChart24h.map(d => d[0] + 'h'),
+                    datasets: [{{
+                        data: periodChart24h.map(d => d[1]),
+                        borderColor: 'rgb(147, 51, 234)',
+                        backgroundColor: 'rgba(147, 51, 234, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: 'rgb(147, 51, 234)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }}]
+                }},
+                options: chartConfig
+            }});
+        }}
+        
+        // Tide height chart
+        const tideData = {tide_chart_data};
+        if (tideData.length > 0) {{
+            const tideChart24h = tideData.slice(0, 8); // 24 hours worth
+            const tideCtx = document.getElementById('tideChart').getContext('2d');
+            new Chart(tideCtx, {{
+                type: 'line',
+                data: {{
+                    labels: tideChart24h.map(d => d[0] + 'h'),
+                    datasets: [{{
+                        data: tideChart24h.map(d => d[1]),
+                        borderColor: 'rgb(34, 197, 94)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: 'rgb(34, 197, 94)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }}]
+                }},
+                options: chartConfig
+            }});
+        }}
+    </script>
+</body>
+</html>
+"""
 
 @app.get("/")
-async def read_root():
-    """Serve the main page"""
-    return FileResponse('static/index.html')
+async def root():
+    """Redirect to random surf spot"""
+    random_spot = random.choice(list(SURF_SPOTS.keys()))
+    return RedirectResponse(url=f"/{random_spot}")
 
-# should return page static/test.html
-@app.get("/test")
-async def read_test():
-    return FileResponse('static/test.html')
+@app.get("/{spot}", response_class=HTMLResponse)
+async def get_spot_page(spot: str):
+    """Get surf spot page"""
+    if spot.lower() not in SURF_SPOTS:
+        raise HTTPException(status_code=404, detail="Surf spot not found")
+    
+    # Get latest data using the updated get_report logic
+    try:
+        logging.info(f"Querying Supabase for spot: {spot}")
+        result = supabase.table('surf_reports').select('*').ilike('spot_name', spot).order('timestamp', desc=True).limit(1).execute()
+        logging.info(f"Query result for spot_name ilike {spot}: {len(result.data) if result.data else 0} records")
+        
+        if not result.data:
+            # Fallback to old 'spot' column if spot_name doesn't have data
+            logging.info(f"Trying fallback query with spot ilike {spot}")
+            result = supabase.table('surf_reports').select('*').ilike('spot', spot).order('timestamp', desc=True).limit(1).execute()
+            logging.info(f"Fallback query result for spot ilike {spot}: {len(result.data) if result.data else 0} records")
+            
+        if result.data:
+            data = result.data[0]
+            logging.info(f"Found data for {spot}: keys={list(data.keys())}")
+            logging.info(f"Sample data: wave_forecast_168h length={len(data.get('wave_forecast_168h', []))}")
+            logging.info(f"Sample data: water_temp_f={data.get('water_temp_f')}")
+            logging.info(f"Sample data: wind_speed_mph={data.get('wind_speed_mph')}")
+            
+            # Transform data for frontend compatibility (same as get_report)
+            transformed_data = {
+                'spot': data.get('spot_name', data.get('spot', spot)),
+                'timestamp': data.get('timestamp'),
+                'water_temp_f': data.get('water_temp_f'),
+                'wind_speed_mph': data.get('wind_speed_mph', data.get('wind_mph')),
+                'wind_direction_deg': data.get('wind_direction_deg'),
+                'stream_link': data.get('stream_link'),
+                'spot_config': data.get('spot_config', {}),
+                
+                # Wave data
+                'wave_forecast_168h': data.get('wave_forecast_168h', []),
+                'wave_height_forecast': data.get('wave_height_forecast', []),
+                
+                # Period data  
+                'period_forecast_168h': data.get('period_forecast_168h', []),
+                
+                # Tide data
+                'tide_forecast_7d': data.get('tide_forecast_7d', []),
+                'tide_height_forecast': data.get('tide_height_forecast', []),
+                
+                # Current conditions (extract from forecast data)
+                'current_wave_height': data.get('wave_forecast_168h')[0][2] if data.get('wave_forecast_168h') and len(data.get('wave_forecast_168h')) > 0 else 'Loading...',  # avg from first entry
+                'current_period': data.get('period_forecast_168h')[0][0] if data.get('period_forecast_168h') and len(data.get('period_forecast_168h')) > 0 else 'Loading...',  # period from first entry
+                'current_tide_height': data.get('tide_forecast_7d')[0][0] if data.get('tide_forecast_7d') and len(data.get('tide_forecast_7d')) > 0 else 'Loading...'  # height from first entry
+            }
+        else:
+            logging.warning(f"No data found for spot: {spot}")
+            transformed_data = {}
+    except Exception as e:
+        logging.error(f"Database error: {e}")
+        transformed_data = {}
+    
+    return get_html_template(spot, transformed_data)
 
-@app.get("/api/webcam-proxy")
-async def webcam_proxy():
-    """Proxy webcam stream to bypass domain restrictions"""
-    import httpx
+@app.get("/api/get_report")
+async def get_report(spot: str):
+    """Get latest surf report for a spot"""
+    try:
+        # Query by spot_name (new column) first, fallback to spot (old column) for compatibility - case insensitive
+        result = supabase.table('surf_reports').select('*').ilike('spot_name', spot).order('timestamp', desc=True).limit(1).execute()
+        if not result.data:
+            # Fallback to old 'spot' column if spot_name doesn't have data
+            result = supabase.table('surf_reports').select('*').ilike('spot', spot).order('timestamp', desc=True).limit(1).execute()
+        if result.data:
+            data = result.data[0]
+            
+            # Transform data for frontend compatibility
+            transformed_data = {
+                'spot': data.get('spot_name', data.get('spot', spot)),
+                'timestamp': data.get('timestamp'),
+                'water_temp_f': data.get('water_temp_f'),
+                'wind_speed_mph': data.get('wind_speed_mph', data.get('wind_mph')),
+                'wind_direction_deg': data.get('wind_direction_deg'),
+                'stream_link': data.get('stream_link'),
+                'spot_config': data.get('spot_config', {}),
+                
+                # Wave data
+                'wave_forecast_168h': data.get('wave_forecast_168h', []),
+                'wave_height_forecast': data.get('wave_height_forecast', []),
+                
+                # Period data  
+                'period_forecast_168h': data.get('period_forecast_168h', []),
+                
+                # Tide data
+                'tide_forecast_7d': data.get('tide_forecast_7d', []),
+                'tide_height_forecast': data.get('tide_height_forecast', []),
+                
+                # Current conditions (extract from forecast data)
+                'current_wave_height': data.get('wave_forecast_168h')[0][2] if data.get('wave_forecast_168h') and len(data.get('wave_forecast_168h')) > 0 else 'Loading...',  # avg from first entry
+                'current_period': data.get('period_forecast_168h')[0][0] if data.get('period_forecast_168h') and len(data.get('period_forecast_168h')) > 0 else 'Loading...',  # period from first entry
+                'current_tide_height': data.get('tide_forecast_7d')[0][0] if data.get('tide_forecast_7d') and len(data.get('tide_forecast_7d')) > 0 else 'Loading...'  # height from first entry
+            }
+            
+            return transformed_data
+        else:
+            return {"error": "No data available", "spot": spot}
+    except Exception as e:
+        logging.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+
+@app.post("/api/update_spot")
+@app.get("/api/update_spot")
+async def update_spot(request: Request):
+    """Update surf spot data - supports ?spot=spotname query parameter"""
+    from surf_report_update_spot import update_spot_to_supabase
+    
+    # Get spot from query parameter
+    spot_name = request.query_params.get('spot')
+    
+    if not spot_name:
+        return {
+            "status": "error",
+            "message": "Missing 'spot' query parameter. Use ?spot=spotname",
+            "example": "/api/update_spot?spot=Tamarack",
+            "timestamp": datetime.now().isoformat()
+        }
     
     try:
-        # Try to fetch the HDOnTap embed page and serve it
-        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
-            # More comprehensive browser headers
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate, br",
-                "DNT": "1",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "iframe",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "cross-site",
-                "Referer": "https://visitcarlsbad.com/carlsbad-live-beach-cam/",
-                "Origin": "https://visitcarlsbad.com"
-            }
-            
-            response = await client.get(
-                "https://portal.hdontap.com/s/embed?stream=hdontap_carlsbad_terra-mar-pt-VISIT_CARLSBAD&ratio=16:9&fluid=true",
-                headers=headers
-            )
-            
-            print(f"Webcam proxy response: {response.status_code}, URL: {response.url}")
-            
-            if response.status_code == 200:
-                # Return the content with modified headers
-                from fastapi.responses import HTMLResponse
-                content = response.text
-                
-                # Debug: Print lines containing the files we're looking for 
-                lines = content.split('\n')
-                for i, line in enumerate(lines):
-                    if 'hdot-player.min.js' in line or 'app-3ce5f880.js' in line or 'hdot-player.min.css' in line:
-                        print(f"Line {i}: {line.strip()}")
-                
-                # Fix all relative URLs to be absolute HDOnTap URLs
-                content = content.replace('src="//', 'src="https://')
-                content = content.replace("src='//", "src='https://")
-                content = content.replace('href="//', 'href="https://')
-                content = content.replace("href='//", "href='https://")
-                
-                # Fix relative paths that start with / to point to HDOnTap
-                content = content.replace('src="/', 'src="https://portal.hdontap.com/')
-                content = content.replace("src='/", "src='https://portal.hdontap.com/")
-                content = content.replace('href="/', 'href="https://portal.hdontap.com/')
-                content = content.replace("href='/", "href='https://portal.hdontap.com/")
-                
-                # Fix any portal.hdontap.com references
-                content = content.replace('//portal.hdontap.com', 'https://portal.hdontap.com')
-                
-                # Fix action URLs for forms
-                content = content.replace('action="/', 'action="https://portal.hdontap.com/')
-                
-                # Fix any API calls or fetch requests
-                content = content.replace('"/api/', '"https://portal.hdontap.com/api/')
-                content = content.replace("'/api/", "'https://portal.hdontap.com/api/")
-                
-                # Replace specific files with local versions first (before general replacements)
-                content = content.replace('/assets/js/hdot-player/hdot-player.min.js', '/static/hdot-player.min.js')
-                content = content.replace('/scripts/app-3ce5f880.js', '/static/app-3ce5f880.js')
-                
-                # CSS file - keep pointing to HDOnTap since we don't have it locally  
-                content = content.replace('/assets/js/hdot-player/hdot-player.min.css', 'https://portal.hdontap.com/assets/js/hdot-player/hdot-player.min.css')
-                
-                # Fix remaining assets that we don't have locally
-                content = content.replace('"/assets/', '"https://portal.hdontap.com/assets/')
-                content = content.replace("'/assets/", "'https://portal.hdontap.com/assets/")
-                content = content.replace('"/scripts/', '"https://portal.hdontap.com/scripts/')
-                content = content.replace("'/scripts/", "'https://portal.hdontap.com/scripts/")
-                
-                return HTMLResponse(
-                    content=content,
-                    headers={
-                        "X-Frame-Options": "SAMEORIGIN",
-                        "Content-Security-Policy": "frame-ancestors 'self'",
-                        "Cache-Control": "no-cache, no-store, must-revalidate"
-                    }
-                )
-            else:
-                print(f"Webcam fetch failed. Status: {response.status_code}, Final URL: {response.url}")
-                return {"error": "Webcam not available", "status": response.status_code, "final_url": str(response.url)}
-                
-    except Exception as e:
-        print(f"Webcam proxy error: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"error": "Webcam service unavailable", "details": str(e)}
-
-@app.get("/api/tamarack/forecast")
-async def get_tamarack_forecast():
-    """Get complete forecast with caching"""
-    try:
-        # Get data (cached or fresh)
-        wave_data = await get_tamarack_wave_forecast()
-        tide_data = await get_tamarack_tide_forecast()
-        wind_data = await get_tamarack_wind_forecast()
+        # Call the surf report update function
+        result = update_spot_to_supabase(spot_name)
         
-        # Format forecast
-        forecast = format_tamarack_forecast(wave_data, tide_data)
-        
-        return {
-            "location": TAMARACK,
-            "forecast": forecast,
-            "chart_data": {
-                "wave_data": wave_data or [],
-                "tide_data": tide_data or [],
-                "wind_data": wind_data or []
-            },
-            "generated_at": datetime.now().isoformat(),
-            "data_sources": {
-                "waves": "NOAA GFS Wave Model - US West Coast",
-                "tides": "NOAA Tide Station 9410170 (San Diego, CA)",
-                "wind": "NOAA National Weather Service - Hourly Forecast"
-            }
-        }
-        
-    except Exception as e:
-        print(f"Error generating forecast: {e}")
-        import traceback
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500, 
-            content={"error": "Failed to generate forecast", "details": str(e)}
-        )
-
-async def get_wind_data():
-    """Get current wind data from NOAA buoy - Note: Often unreliable due to NaN values"""
-    if not SURFPY_AVAILABLE:
-        return None
-        
-    try:
-        # Skip buoy wind data since it's unreliable - just return None
-        print("Skipping NOAA buoy wind data (unreliable NaN values)")
-        return None
-        
-        # Legacy buoy code (disabled)
-        location = surfpy.Location(TAMARACK['lat'], TAMARACK['lng'], altitude=30.0, name='Tamarack')
-        
-        # Try Torrey Pines Outer buoy first (closest to Tamarack)
-        try:
-            buoy = surfpy.BuoyStation('46225', location)
-            latest = buoy.fetch_latest_reading()
-            
-            if latest:
-                # Check for valid wind data (not NaN)
-                wind_speed = None
-                wind_direction = None
-                
-                for speed_attr in ['wind_speed', 'windspd', 'wind_spd', 'wspd']:
-                    if hasattr(latest, speed_attr):
-                        speed_val = getattr(latest, speed_attr)
-                        # Check if value is not NaN and not -999 (missing data indicator)
-                        if speed_val is not None and speed_val == speed_val and speed_val != -999:
-                            wind_speed = speed_val
-                            print(f"Found valid wind speed in {speed_attr}: {wind_speed}")
-                            break
-                        else:
-                            print(f"Invalid wind speed in {speed_attr}: {speed_val}")
-                
-                for dir_attr in ['wind_direction', 'winddir', 'wind_dir', 'wdir']:
-                    if hasattr(latest, dir_attr):
-                        dir_val = getattr(latest, dir_attr)
-                        # Check if value is not NaN and not -999
-                        if dir_val is not None and dir_val == dir_val and dir_val != -999:
-                            wind_direction = dir_val
-                            print(f"Found valid wind direction in {dir_attr}: {wind_direction}")
-                            break
-                        else:
-                            print(f"Invalid wind direction in {dir_attr}: {dir_val}")
-                
-                if wind_speed:
-                    # Convert wind direction to compass direction
-                    def degrees_to_compass(degrees):
-                        if degrees is None:
-                            return "Variable"
-                        directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-                                    "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
-                        return directions[round(degrees / 22.5) % 16]
-                    
-                    # Wind strength description
-                    def wind_strength(speed):
-                        if speed < 5:
-                            return "Light"
-                        elif speed < 15:
-                            return "Moderate"
-                        elif speed < 25:
-                            return "Strong"
-                        else:
-                            return "Very Strong"
-                    
-                    wind_dir = degrees_to_compass(wind_direction) if wind_direction else "Variable"
-                    
-                    return {
-                        "wind_speed_mph": round(wind_speed, 1),
-                        "wind_speed_kts": round(wind_speed * 0.868976, 1),
-                        "wind_direction": wind_dir,
-                        "wind_strength": wind_strength(wind_speed),
-                        "station": "Torrey Pines Outer",
-                        "station_id": "46225"
-                    }
-        except Exception as e:
-            print(f"Error with buoy 46225 wind: {e}")
-        
-        # Fallback to Point Loma buoy
-        try:
-            buoy = surfpy.BuoyStation('46232', location)
-            latest = buoy.fetch_latest_reading()
-            print(f"Buoy 46232 latest reading attributes: {dir(latest) if latest else 'None'}")
-            
-            if latest:
-                # Try different possible wind attribute names
-                wind_speed = None
-                wind_direction = None
-                
-                for speed_attr in ['wind_speed', 'windspd', 'wind_spd', 'wspd']:
-                    if hasattr(latest, speed_attr):
-                        speed_val = getattr(latest, speed_attr)
-                        if speed_val and speed_val != -999 and not (speed_val != speed_val):
-                            wind_speed = speed_val
-                            print(f"Found wind speed in {speed_attr}: {wind_speed}")
-                            break
-                
-                for dir_attr in ['wind_direction', 'winddir', 'wind_dir', 'wdir']:
-                    if hasattr(latest, dir_attr):
-                        dir_val = getattr(latest, dir_attr)
-                        if dir_val and dir_val != -999 and not (dir_val != dir_val):
-                            wind_direction = dir_val
-                            print(f"Found wind direction in {dir_attr}: {wind_direction}")
-                            break
-                
-                if wind_speed:
-                    # Convert wind direction to compass direction
-                    def degrees_to_compass(degrees):
-                        if degrees is None:
-                            return "Variable"
-                        directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-                                    "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
-                        return directions[round(degrees / 22.5) % 16]
-                    
-                    # Wind strength description
-                    def wind_strength(speed):
-                        if speed < 5:
-                            return "Light"
-                        elif speed < 15:
-                            return "Moderate"
-                        elif speed < 25:
-                            return "Strong"
-                        else:
-                            return "Very Strong"
-                    
-                    wind_dir = degrees_to_compass(wind_direction) if wind_direction else "Variable"
-                    
-                    return {
-                        "wind_speed_mph": round(wind_speed, 1),
-                        "wind_speed_kts": round(wind_speed * 0.868976, 1),
-                        "wind_direction": wind_dir,
-                        "wind_strength": wind_strength(wind_speed),
-                        "station": "Point Loma",
-                        "station_id": "46232"
-                    }
-        except Exception as e:
-            print(f"Error with buoy 46232 wind: {e}")
-        
-        return None
-        
-    except Exception as e:
-        print(f"Error fetching wind data: {e}")
-        return None
-
-async def get_water_temperature():
-    """Get current water temperature from NOAA buoy"""
-    if not SURFPY_AVAILABLE:
-        return None
-        
-    try:
-        print("Fetching water temperature from NOAA buoy...")
-        location = surfpy.Location(TAMARACK['lat'], TAMARACK['lng'], altitude=30.0, name='Tamarack')
-        
-        # Try Torrey Pines Outer buoy first (closest to Tamarack)
-        try:
-            buoy = surfpy.BuoyStation('46225', location)
-            latest = buoy.fetch_latest_reading()
-            if latest and not (hasattr(latest, 'water_temperature') and 
-                             (latest.water_temperature != latest.water_temperature or latest.water_temperature == -999)):
-                return {
-                    "water_temp_f": round(latest.water_temperature, 1),
-                    "water_temp_c": round((latest.water_temperature - 32) * 5/9, 1),
-                    "station": "Torrey Pines Outer",
-                    "station_id": "46225"
-                }
-        except Exception as e:
-            print(f"Error with buoy 46225: {e}")
-        
-        # Fallback to Point Loma buoy
-        try:
-            buoy = surfpy.BuoyStation('46232', location)
-            latest = buoy.fetch_latest_reading()
-            if latest and not (hasattr(latest, 'water_temperature') and 
-                             (latest.water_temperature != latest.water_temperature or latest.water_temperature == -999)):
-                return {
-                    "water_temp_f": round(latest.water_temperature, 1),
-                    "water_temp_c": round((latest.water_temperature - 32) * 5/9, 1),
-                    "station": "Point Loma",
-                    "station_id": "46232"
-                }
-        except Exception as e:
-            print(f"Error with buoy 46232: {e}")
-        
-        return None
-        
-    except Exception as e:
-        print(f"Error fetching water temperature: {e}")
-        return None
-
-@app.get("/api/tamarack/current")
-async def get_tamarack_current():
-    """Get current conditions"""
-    try:
-        # Use cached data for speed
-        wave_data = await get_tamarack_wave_forecast()
-        tide_data = await get_tamarack_tide_forecast()
-        water_temp = await get_water_temperature()
-        wind_forecast = await get_tamarack_wind_forecast()
-        current_wind = await get_wind_data()  # Keep current buoy wind as backup
-        
-        current_conditions = {}
-        
-        # Current wave conditions (find closest to current time)
-        if wave_data and len(wave_data) > 0:
-            from pytz import UTC
-            import pytz
-            
-            # Use UTC for all comparisons
-            now_utc = datetime.now(UTC)
-            closest_wave = None
-            min_diff = None
-            
-            for wave in wave_data:
-                wave_time = datetime.fromisoformat(wave['time'])
-                # Ensure wave_time is timezone-aware
-                if wave_time.tzinfo is None:
-                    wave_time = UTC.localize(wave_time)
-                
-                time_diff = abs((wave_time - now_utc).total_seconds())
-                if min_diff is None or time_diff < min_diff:
-                    min_diff = time_diff
-                    closest_wave = wave
-            
-            if closest_wave:
-                current_conditions["waves"] = {
-                    "height": closest_wave['height'],
-                    "period": round(closest_wave['period'], 0),
-                    "direction": closest_wave['direction'],
-                    "timestamp": closest_wave['time']
-                }
-        
-        # Current tide (determine if rising or falling)
-        if tide_data and len(tide_data) > 0:
-            from pytz import UTC
-            
-            # Use UTC for all comparisons
-            now_utc = datetime.now(UTC)
-            previous_tide = None
-            next_tide = None
-            
-            # Find the tides around current time
-            for i, tide in enumerate(tide_data):
-                try:
-                    tide_time = datetime.fromisoformat(tide['time'])
-                    # Ensure tide_time is timezone-aware
-                    if tide_time.tzinfo is None:
-                        tide_time = UTC.localize(tide_time)
-                    
-                    if tide_time <= now_utc:
-                        previous_tide = tide
-                    elif tide_time > now_utc and next_tide is None:
-                        next_tide = tide
-                        break
-                        
-                except Exception as e:
-                    print(f"Error parsing tide time {tide['time']}: {e}")
-                    continue
-            
-            # We need both previous and next tide to determine direction properly
-            if previous_tide and next_tide:
-                try:
-                    # Determine direction based on tide types
-                    is_rising = previous_tide['type'] == 'Low' and next_tide['type'] == 'High'
-                    direction = "Rising" if is_rising else "Falling"
-                    
-                    # Calculate current tide height by interpolating between previous and next
-                    prev_time = datetime.fromisoformat(previous_tide['time'])
-                    next_time = datetime.fromisoformat(next_tide['time'])
-                    if prev_time.tzinfo is None:
-                        prev_time = UTC.localize(prev_time)
-                    if next_time.tzinfo is None:
-                        next_time = UTC.localize(next_time)
-                    
-                    # Linear interpolation
-                    total_duration = (next_time - prev_time).total_seconds()
-                    elapsed_duration = (now_utc - prev_time).total_seconds()
-                    progress = elapsed_duration / total_duration if total_duration > 0 else 0
-                    
-                    # Interpolate height
-                    height_diff = next_tide['height'] - previous_tide['height']
-                    current_height = previous_tide['height'] + (height_diff * progress)
-                    
-                    # Format next tide time for display
-                    local_tz = pytz.timezone('America/Los_Angeles')
-                    local_time = next_time.astimezone(local_tz)
-                    
-                    current_conditions["current_tide"] = {
-                        "current_height": round(current_height, 1),
-                        "next_time": local_time.strftime("%I:%M %p"),
-                        "next_height": next_tide['height'],
-                        "next_type": next_tide['type'],
-                        "direction": direction,
-                        "timestamp": next_tide['time']
-                    }
-                except Exception as e:
-                    print(f"Error formatting current tide time: {e}")
-                    raise e
-        
-        # Add water temperature if available
-        if water_temp:
-            current_conditions["water_temp"] = water_temp
-        
-        # Add wind data - use forecast wind for current conditions (buoy data is unreliable)
-        if wind_forecast and len(wind_forecast) > 0:
-            from pytz import UTC
-            
-            # Find current wind from forecast
-            now_utc = datetime.now(UTC)
-            closest_wind = None
-            min_diff = None
-            
-            for wind in wind_forecast:
-                wind_time = datetime.fromisoformat(wind['time'])
-                if wind_time.tzinfo is None:
-                    wind_time = UTC.localize(wind_time)
-                
-                time_diff = abs((wind_time - now_utc).total_seconds())
-                if min_diff is None or time_diff < min_diff:
-                    min_diff = time_diff
-                    closest_wind = wind
-            
-            if closest_wind:
-                # Add wind strength description
-                def wind_strength(speed):
-                    if speed < 5:
-                        return "Light"
-                    elif speed < 15:
-                        return "Moderate" 
-                    elif speed < 25:
-                        return "Strong"
-                    else:
-                        return "Very Strong"
-                
-                current_conditions["wind"] = {
-                    "wind_speed_mph": closest_wind['wind_speed_mph'],
-                    "wind_speed_kts": closest_wind['wind_speed_kts'],
-                    "wind_direction": closest_wind['wind_direction'],
-                    "wind_strength": wind_strength(closest_wind['wind_speed_mph']),
-                    "air_temperature": closest_wind.get('air_temperature'),
-                    "short_forecast": closest_wind.get('short_forecast'),
-                    "source": "NWS Forecast",
-                    "timestamp": closest_wind['time']
-                }
+        if result["status"] == "success":
+            logging.info(f"Successfully updated surf spot: {spot_name}")
         else:
-            # No wind data available
-            print("No wind data available from forecast or buoy")
+            logging.error(f"Failed to update surf spot {spot_name}: {result['message']}")
         
-        return current_conditions
+        return result
         
     except Exception as e:
-        print(f"Error getting current conditions: {e}")
-        import traceback
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Failed to get current conditions", "details": str(e)}
-        )
+        logging.error(f"Error updating spot {spot_name}: {e}")
+        return {
+            "status": "error",
+            "message": f"Unexpected error: {str(e)}",
+            "spot_name": spot_name,
+            "timestamp": datetime.now().isoformat()
+        }
 
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
-    init_db()
-    print("Database initialized")
+@app.post("/api/new_spot_request")
+async def new_spot_request(email: str, spot_name: str):
+    """Submit new surf spot request"""
+    try:
+        result = supabase.table('spot_requests').insert({
+            "email": email,
+            "spot_name": spot_name,
+            "timestamp": datetime.now().isoformat(),
+            "implemented": False
+        }).execute()
+        return {"status": "success", "message": "Spot request submitted"}
+    except Exception as e:
+        logging.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

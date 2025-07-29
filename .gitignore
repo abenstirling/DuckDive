@@ -1,5 +1,17 @@
+
+venv/
+.env
+ENV/
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+
+# Virtual environment
 venv/
 .env/
-ENV/
+
+# Editor settings
+.vscode/
+*.swp
+
+.claude
