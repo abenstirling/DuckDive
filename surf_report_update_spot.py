@@ -1,4 +1,4 @@
-import surfpy.surfpy as surfpy
+import surfpy as surfpy
 import matplotlib.pyplot as plt
 import csv
 import datetime

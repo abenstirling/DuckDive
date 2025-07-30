@@ -1,6 +1,6 @@
 import sys
 import datetime
-import surfpy.surfpy as surfpy
+import surfpy
 
 def get_tide_forecast(station_id):
     """

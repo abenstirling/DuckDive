@@ -1,2 +1,3 @@
 name,closest_station,location_n,closest_tide,location_w,altitude,depth,angle,slope,wave_model,stream_link
 'Tamarack',46224,33.146,9410230,117.346,30.0,25.0,225.0,0.02,'us_west_coast_gfs_wave_model',null
+'OB',46232,32.7495,9410230,117.2470,30.0,25.0,225.0,0.02,'us_west_coast_gfs_wave_model',null

@@ -1,7 +1,6 @@
 import sys
 import matplotlib.pyplot as plt
-import surfpy.surfpy as surfpy
-
+import surfpy
 def get_surf_forecast(wave_location, num_hours_to_forecast):
     """
     Get surf forecast data for a given location and time period.

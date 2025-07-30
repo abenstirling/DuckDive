@@ -1,5 +1,5 @@
 import sys
-import surfpy.surfpy as surfpy
+import surfpy as surfpy
 
 def get_current_wind(location):
     """

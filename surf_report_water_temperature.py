@@ -1,7 +1,7 @@
 import sys
 import datetime
 from surfpy.buoystation import BuoyStation
-import surfpy.surfpy as surfpy
+import surfpy
 
 def get_water_temp_forecast(wave_location, hours_forecast=1):
     """

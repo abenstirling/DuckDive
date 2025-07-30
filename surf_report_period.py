@@ -1,6 +1,6 @@
 import sys
 import matplotlib.pyplot as plt
-import surfpy.surfpy as surfpy
+import surfpy
 
 def get_period_forecast(wave_location, num_hours_to_forecast):
     """
