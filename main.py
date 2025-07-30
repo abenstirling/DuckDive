@@ -15,6 +15,9 @@ import logging
 
 app = FastAPI()
 
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # Supabase client setup
 supabase: Client = create_client(
     os.getenv("SUPABASE_URL"),
@@ -53,13 +56,13 @@ def get_current_conditions(data: Dict[str, Any]) -> Dict[str, Any]:
     """Extract current conditions from forecast data"""
     current = {}
     
-    # Get current conditions from the new data structure
-    current['wave_height'] = data.get('current_wave_height', 'Loading...')
-    current['tide_height'] = data.get('current_tide_height', 'Loading...')
-    current['water_temp'] = data.get('water_temp_f', 'Loading...')
-    current['wind_speed'] = data.get('wind_speed_mph', 'Loading...')
-    current['wind_direction'] = data.get('wind_direction_deg', 'Loading...')
-    current['period'] = data.get('current_period', 'Loading...')
+    # Get current conditions from the new data structure - round to 1 decimal place
+    current['wave_height'] = round(data.get('current_wave_height'), 1) if isinstance(data.get('current_wave_height'), (int, float)) else data.get('current_wave_height', 'Loading...')
+    current['tide_height'] = round(data.get('current_tide_height'), 1) if isinstance(data.get('current_tide_height'), (int, float)) else data.get('current_tide_height', 'Loading...')
+    current['water_temp'] = round(data.get('water_temp_f'), 1) if isinstance(data.get('water_temp_f'), (int, float)) else data.get('water_temp_f', 'Loading...')
+    current['wind_speed'] = round(data.get('wind_speed_mph'), 1) if isinstance(data.get('wind_speed_mph'), (int, float)) else data.get('wind_speed_mph', 'Loading...')
+    current['wind_direction'] = round(data.get('wind_direction_deg'), 0) if isinstance(data.get('wind_direction_deg'), (int, float)) else data.get('wind_direction_deg', 'Loading...')
+    current['period'] = round(data.get('current_period'), 1) if isinstance(data.get('current_period'), (int, float)) else data.get('current_period', 'Loading...')
     
     return current
 
@@ -73,25 +76,32 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
     wind_direction = current['wind_direction']
     period = current['period']
     
-    # Prepare forecast data for charts - use new comprehensive data
+    # Get stream link
+    stream_link = data.get('stream_link')
+    
+    # Prepare simple chart data
     wave_forecast_168h = data.get('wave_forecast_168h', [])
     period_forecast_168h = data.get('period_forecast_168h', [])
     tide_forecast_7d = data.get('tide_forecast_7d', [])
     
-    # Convert wave data for chart (use average wave height)
-    wave_chart_data = [[entry[3], entry[2]] for entry in wave_forecast_168h] if wave_forecast_168h else []
+    # Extract simple data arrays for charts (first 56 points = 7 days)
+    wave_chart_data = []
+    if wave_forecast_168h:
+        for entry in wave_forecast_168h[:56]:  # 7 days of 3-hour intervals
+            if len(entry) >= 3:
+                wave_chart_data.append(entry[2])  # avg wave height
     
-    # Convert period data for chart  
-    period_chart_data = [[entry[1], entry[0]] for entry in period_forecast_168h] if period_forecast_168h else []
+    period_chart_data = []
+    if period_forecast_168h:
+        for entry in period_forecast_168h[:56]:  # 7 days
+            if len(entry) >= 2:
+                period_chart_data.append(entry[0])  # period
     
-    # Convert tide data for chart (extract height and create hourly approximation)
     tide_chart_data = []
     if tide_forecast_7d:
-        for i, (height, tide_type, dt) in enumerate(tide_forecast_7d[:24]):  # First 24 entries
-            tide_chart_data.append([i*3, height])  # Approximate hourly from tide events
-    
-    # Get stream link
-    stream_link = data.get('stream_link')
+        for entry in tide_forecast_7d:  # All tide events
+            if len(entry) >= 1:
+                tide_chart_data.append(entry[0])  # tide height
     
     # Create dropdown options
     dropdown_options = ""
@@ -100,203 +110,32 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
         display_name = spot_info.get('name', spot_name.title())
         dropdown_options += f'<option value="{spot_name}" {selected}>{display_name}</option>'
     
-    return f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Duck Dive - {spot.title()}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <meta http-equiv="refresh" content="300">
-</head>
-<body class="bg-gradient-to-br from-blue-50 to-cyan-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="text-center mb-8">
-            <h1 class="text-5xl font-bold text-blue-900 mb-4">🏄‍♂️ Duck Dive</h1>
-            <div class="mb-4">
-                <select id="spotSelector" class="px-6 py-3 border-2 border-blue-200 rounded-xl bg-white shadow-lg text-lg font-medium">
-                    {dropdown_options}
-                </select>
-            </div>
-            <h2 class="text-3xl font-semibold text-blue-700">{spot.title()}</h2>
-            {'<p class="text-blue-600 mt-2"><a href="' + stream_link + '" target="_blank" class="underline hover:text-blue-800">📹 Live Stream</a></p>' if stream_link else ''}
-        </div>
-        
-        <!-- Current Conditions Grid -->
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl mx-auto mb-8">
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-blue-500">
-                <div class="text-3xl font-bold text-blue-600 mb-2">{wave_height}</div>
-                <div class="text-gray-600 font-medium">Wave Height (ft)</div>
-            </div>
-            
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-purple-500">
-                <div class="text-3xl font-bold text-purple-600 mb-2">{period}</div>
-                <div class="text-gray-600 font-medium">Period (sec)</div>
-            </div>
-            
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-green-500">
-                <div class="text-3xl font-bold text-green-600 mb-2">{tide_height}</div>
-                <div class="text-gray-600 font-medium">Tide Height (ft)</div>
-            </div>
-            
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-cyan-500">
-                <div class="text-3xl font-bold text-cyan-600 mb-2">{wind_speed}</div>
-                <div class="text-gray-600 font-medium">Wind Speed (mph)</div>
-                <div class="text-sm text-gray-500 mt-1">{wind_direction}°</div>
-            </div>
-            
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-orange-500">
-                <div class="text-3xl font-bold text-orange-600 mb-2">{water_temp}</div>
-                <div class="text-gray-600 font-medium">Water Temp (°F)</div>
-            </div>
-            
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-indigo-500">
-                <div class="text-2xl font-bold text-indigo-600 mb-2">📊</div>
-                <div class="text-gray-600 font-medium">7-Day Forecast</div>
-                <div class="text-sm text-gray-500 mt-1">Available</div>
-            </div>
-        </div>
-        
-        <!-- Forecast Charts -->
-        <div class="max-w-6xl mx-auto mb-8">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Wave Height Forecast -->
-                <div class="bg-white rounded-xl shadow-lg p-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">Wave Height (48h)</h3>
-                    <canvas id="waveChart" width="400" height="300"></canvas>
-                </div>
-                
-                <!-- Wave Period Forecast -->
-                <div class="bg-white rounded-xl shadow-lg p-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">Wave Period (48h)</h3>
-                    <canvas id="periodChart" width="400" height="300"></canvas>
-                </div>
-                
-                <!-- Tide Height Forecast -->
-                <div class="bg-white rounded-xl shadow-lg p-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">Tide Height (24h)</h3>
-                    <canvas id="tideChart" width="400" height="300"></canvas>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Footer -->
-        <div class="text-center mt-8 text-gray-500 text-sm">
-            <p class="font-medium">Updates every 5 minutes • 7-Day Comprehensive Forecast</p>
-            <p>Last updated: {datetime.now().strftime('%I:%M %p on %B %d, %Y')}</p>
-        </div>
-    </div>
+    # Read HTML template
+    with open('static/index.html', 'r') as f:
+        template = f.read()
     
-    <script>
-        // Spot selector
-        document.getElementById('spotSelector').addEventListener('change', function() {{
-            const selectedSpot = this.value;
-            if (selectedSpot) {{
-                window.location.href = '/' + selectedSpot;
-            }}
-        }});
-        
-        // Chart configuration
-        const chartConfig = {{
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {{
-                y: {{
-                    beginAtZero: true,
-                    grid: {{ color: 'rgba(0,0,0,0.1)' }},
-                    ticks: {{ color: '#6B7280' }}
-                }},
-                x: {{
-                    grid: {{ color: 'rgba(0,0,0,0.1)' }},
-                    ticks: {{ color: '#6B7280' }}
-                }}
-            }},
-            plugins: {{
-                legend: {{ display: false }}
-            }}
-        }};
-        
-        // Wave height chart
-        const waveData = {wave_chart_data};
-        if (waveData.length > 0) {{
-            const waveChart24h = waveData.slice(0, 16); // 48 hours (every 3 hours)
-            const waveCtx = document.getElementById('waveChart').getContext('2d');
-            new Chart(waveCtx, {{
-                type: 'line',
-                data: {{
-                    labels: waveChart24h.map(d => d[0] + 'h'),
-                    datasets: [{{
-                        data: waveChart24h.map(d => d[1]),
-                        borderColor: 'rgb(37, 99, 235)',
-                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                        borderWidth: 3,
-                        tension: 0.4,
-                        fill: true,
-                        pointBackgroundColor: 'rgb(37, 99, 235)',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2
-                    }}]
-                }},
-                options: chartConfig
-            }});
-        }}
-        
-        // Wave period chart
-        const periodData = {period_chart_data};
-        if (periodData.length > 0) {{
-            const periodChart24h = periodData.slice(0, 16); // 48 hours
-            const periodCtx = document.getElementById('periodChart').getContext('2d');
-            new Chart(periodCtx, {{
-                type: 'line',
-                data: {{
-                    labels: periodChart24h.map(d => d[0] + 'h'),
-                    datasets: [{{
-                        data: periodChart24h.map(d => d[1]),
-                        borderColor: 'rgb(147, 51, 234)',
-                        backgroundColor: 'rgba(147, 51, 234, 0.1)',
-                        borderWidth: 3,
-                        tension: 0.4,
-                        fill: true,
-                        pointBackgroundColor: 'rgb(147, 51, 234)',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2
-                    }}]
-                }},
-                options: chartConfig
-            }});
-        }}
-        
-        // Tide height chart
-        const tideData = {tide_chart_data};
-        if (tideData.length > 0) {{
-            const tideChart24h = tideData.slice(0, 8); // 24 hours worth
-            const tideCtx = document.getElementById('tideChart').getContext('2d');
-            new Chart(tideCtx, {{
-                type: 'line',
-                data: {{
-                    labels: tideChart24h.map(d => d[0] + 'h'),
-                    datasets: [{{
-                        data: tideChart24h.map(d => d[1]),
-                        borderColor: 'rgb(34, 197, 94)',
-                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                        borderWidth: 3,
-                        tension: 0.4,
-                        fill: true,
-                        pointBackgroundColor: 'rgb(34, 197, 94)',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2
-                    }}]
-                }},
-                options: chartConfig
-            }});
-        }}
-    </script>
-</body>
-</html>
-"""
+    # Replace placeholders
+    stream_link_html = f'<p class="text-blue-600 mt-2"><a href="{stream_link}" target="_blank" class="underline hover:text-blue-800">📹 Live Stream</a></p>' if stream_link else ''
+    
+    # Use string replacement instead of .format() to avoid conflicts with JavaScript
+    html = template.replace('{spot_title}', spot.title())
+    html = html.replace('{dropdown_options}', dropdown_options)
+    html = html.replace('{stream_link_html}', stream_link_html)
+    html = html.replace('{wave_height}', str(wave_height))
+    html = html.replace('{period}', str(period))
+    html = html.replace('{tide_height}', str(tide_height))
+    html = html.replace('{wind_speed}', str(wind_speed))
+    html = html.replace('{wind_direction}', str(wind_direction))
+    html = html.replace('{water_temp}', str(water_temp))
+    html = html.replace('{last_updated}', datetime.now().strftime('%I:%M %p on %B %d, %Y'))
+    
+    # Replace chart data placeholders with JSON data
+    import json
+    html = html.replace('WAVE_DATA_PLACEHOLDER', json.dumps(wave_chart_data))
+    html = html.replace('PERIOD_DATA_PLACEHOLDER', json.dumps(period_chart_data))
+    html = html.replace('TIDE_DATA_PLACEHOLDER', json.dumps(tide_chart_data))
+    
+    return html
 
 @app.get("/")
 async def root():
@@ -350,13 +189,13 @@ async def get_spot_page(spot: str):
                 'tide_forecast_7d': data.get('tide_forecast_7d', []),
                 'tide_height_forecast': data.get('tide_height_forecast', []),
                 
-                # Current conditions (extract from forecast data)
-                'current_wave_height': data.get('wave_forecast_168h')[0][2] if data.get('wave_forecast_168h') and len(data.get('wave_forecast_168h')) > 0 else 'Loading...',  # avg from first entry
-                'current_period': data.get('period_forecast_168h')[0][0] if data.get('period_forecast_168h') and len(data.get('period_forecast_168h')) > 0 else 'Loading...',  # period from first entry
-                'current_tide_height': data.get('tide_forecast_7d')[0][0] if data.get('tide_forecast_7d') and len(data.get('tide_forecast_7d')) > 0 else 'Loading...'  # height from first entry
+                # Current conditions (extract from forecast data) - round to 1 decimal
+                'current_wave_height': round(data.get('wave_forecast_168h')[0][2], 1) if data.get('wave_forecast_168h') and len(data.get('wave_forecast_168h')) > 0 else 'Loading...',  # avg from first entry
+                'current_period': round(data.get('period_forecast_168h')[0][0], 1) if data.get('period_forecast_168h') and len(data.get('period_forecast_168h')) > 0 else 'Loading...',  # period from first entry
+                'current_tide_height': round(data.get('tide_forecast_7d')[0][0], 1) if data.get('tide_forecast_7d') and len(data.get('tide_forecast_7d')) > 0 else 'Loading...'  # height from first entry
             }
         else:
-            logging.warning(f"No data found for spot: {spot}")
+            # Only log warning if both queries failed (no data actually found)
             transformed_data = {}
     except Exception as e:
         logging.error(f"Database error: {e}")
@@ -397,10 +236,10 @@ async def get_report(spot: str):
                 'tide_forecast_7d': data.get('tide_forecast_7d', []),
                 'tide_height_forecast': data.get('tide_height_forecast', []),
                 
-                # Current conditions (extract from forecast data)
-                'current_wave_height': data.get('wave_forecast_168h')[0][2] if data.get('wave_forecast_168h') and len(data.get('wave_forecast_168h')) > 0 else 'Loading...',  # avg from first entry
-                'current_period': data.get('period_forecast_168h')[0][0] if data.get('period_forecast_168h') and len(data.get('period_forecast_168h')) > 0 else 'Loading...',  # period from first entry
-                'current_tide_height': data.get('tide_forecast_7d')[0][0] if data.get('tide_forecast_7d') and len(data.get('tide_forecast_7d')) > 0 else 'Loading...'  # height from first entry
+                # Current conditions (extract from forecast data) - round to 1 decimal
+                'current_wave_height': round(data.get('wave_forecast_168h')[0][2], 1) if data.get('wave_forecast_168h') and len(data.get('wave_forecast_168h')) > 0 else 'Loading...',  # avg from first entry
+                'current_period': round(data.get('period_forecast_168h')[0][0], 1) if data.get('period_forecast_168h') and len(data.get('period_forecast_168h')) > 0 else 'Loading...',  # period from first entry
+                'current_tide_height': round(data.get('tide_forecast_7d')[0][0], 1) if data.get('tide_forecast_7d') and len(data.get('tide_forecast_7d')) > 0 else 'Loading...'  # height from first entry
             }
             
             return transformed_data
