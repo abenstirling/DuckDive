@@ -4,4 +4,7 @@ supabase==2.0.0
 matplotlib==3.8.0
 numpy==1.25.0
 python-dotenv==1.0.0
--e ./surfpy
+requests
+pytz
+setuptools>=45
+wheel

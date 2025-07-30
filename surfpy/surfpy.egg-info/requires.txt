@@ -1,6 +1,0 @@
-requests
-pytz
-numpy
-
-[pygrib]
-pygrib
