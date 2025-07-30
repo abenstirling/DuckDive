@@ -114,6 +114,48 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
     with open('static/index.html', 'r') as f:
         template = f.read()
     
+    # Calculate tide direction and next tide info
+    tide_direction = "→"  # Default
+    tide_status = "Loading..."
+    tide_time = "..."
+    tide_labels = []
+    
+    if tide_forecast_7d and len(tide_forecast_7d) >= 2:
+        try:
+            # Get current and next tide heights to determine direction
+            current_tide_height = tide_forecast_7d[0][0]  # height from first entry
+            next_tide_height = tide_forecast_7d[1][0]     # height from second entry
+            
+            # Determine tide direction (↑ rising, ↓ falling)
+            if next_tide_height > current_tide_height:
+                tide_direction = "↑"
+            else:
+                tide_direction = "↓"
+            
+            # Get next high/low tide info
+            next_tide_type = tide_forecast_7d[1][1]  # HIGH or LOW from second entry
+            next_tide_datetime = tide_forecast_7d[1][2]  # datetime from second entry
+            
+            tide_status = next_tide_type
+            if isinstance(next_tide_datetime, str):
+                # Parse datetime string if needed
+                from dateutil import parser
+                next_tide_datetime = parser.parse(next_tide_datetime)
+            tide_time = next_tide_datetime.strftime('%I:%M %p')
+            
+            # Create tide labels for chart hover (time labels)
+            tide_labels = []
+            for entry in tide_forecast_7d:
+                if len(entry) >= 3:
+                    tide_dt = entry[2]
+                    if isinstance(tide_dt, str):
+                        from dateutil import parser
+                        tide_dt = parser.parse(tide_dt)
+                    tide_labels.append(tide_dt.strftime('%m/%d %I:%M %p'))
+                    
+        except Exception as e:
+            logging.error(f"Error calculating tide info: {e}")
+    
     # Replace placeholders
     stream_link_html = f'<p class="text-blue-600 mt-2"><a href="{stream_link}" target="_blank" class="underline hover:text-blue-800">📹 Live Stream</a></p>' if stream_link else ''
     
@@ -124,6 +166,9 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
     html = html.replace('{wave_height}', str(wave_height))
     html = html.replace('{period}', str(period))
     html = html.replace('{tide_height}', str(tide_height))
+    html = html.replace('{tide_direction}', tide_direction)
+    html = html.replace('{tide_status}', tide_status)
+    html = html.replace('{tide_time}', tide_time)
     html = html.replace('{wind_speed}', str(wind_speed))
     html = html.replace('{wind_direction}', str(wind_direction))
     html = html.replace('{water_temp}', str(water_temp))
@@ -134,6 +179,7 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
     html = html.replace('WAVE_DATA_PLACEHOLDER', json.dumps(wave_chart_data))
     html = html.replace('PERIOD_DATA_PLACEHOLDER', json.dumps(period_chart_data))
     html = html.replace('TIDE_DATA_PLACEHOLDER', json.dumps(tide_chart_data))
+    html = html.replace('TIDE_LABELS_PLACEHOLDER', json.dumps(tide_labels))
     
     return html
 

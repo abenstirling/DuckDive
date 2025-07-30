@@ -3,97 +3,191 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Duck Dive - {spot_title}</title>
+    <title>Surf Report - {spot_title}</title>
     <link rel="icon" type="image/png" href="/static/duck_dive_favicon.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <meta http-equiv="refresh" content="300">
+    <style>
+        body {
+            font-family: 'JetBrains Mono', monospace;
+        }
+    </style>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-cyan-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="text-center mb-8">
-            <h1 class="text-5xl font-bold text-blue-900 mb-4">🏄‍♂️ Duck Dive</h1>
-            <div class="mb-4">
-                <select id="spotSelector" class="px-6 py-3 border-2 border-blue-200 rounded-xl bg-white shadow-lg text-lg font-medium">
-                    {dropdown_options}
-                </select>
+<body class="bg-white min-h-screen">
+    <!-- Simple Navbar -->
+    <nav class="border-b border-gray-200 mb-8">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <h1 class="text-xl font-bold text-black">DUCK DIVE</h1>
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <button id="dropdownButton" class="px-3 py-2 border border-gray-300 bg-white text-sm hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-black flex items-center justify-between min-w-[150px]">
+                            <span id="selectedSpot">SELECT SPOT</span>
+                            <svg class="w-4 h-4 ml-2 transition-transform duration-200" id="dropdownArrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        <div id="dropdownMenu" class="absolute top-full left-0 mt-1 w-full bg-white border border-gray-300 hidden z-50 max-h-48 overflow-y-auto">
+                            <!-- Options will be populated by JavaScript -->
+                        </div>
+                        <select id="hiddenSelect" class="hidden">
+                            {dropdown_options}
+                        </select>
+                    </div>
+                </div>
             </div>
-            <h2 class="text-3xl font-semibold text-blue-700">{spot_title}</h2>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4">
+        <!-- Location Title -->
+        <div class="text-center mb-8">
+            <h2 class="text-2xl font-bold text-black">{spot_title}</h2>
             {stream_link_html}
         </div>
         
         <!-- Current Conditions Grid -->
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl mx-auto mb-8">
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-blue-500">
-                <div class="text-3xl font-bold text-blue-600 mb-2">{wave_height}</div>
-                <div class="text-gray-600 font-medium">Wave Height (ft)</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto mb-8">
+            <div class="bg-white border border-gray-300 aspect-square p-4 text-center flex flex-col justify-center">
+                <div class="text-2xl font-bold text-black mb-2">{wave_height}</div>
+                <div class="text-sm text-gray-600 font-medium">WAVE HEIGHT</div>
+                <div class="text-xs text-gray-500 mt-1">feet</div>
             </div>
             
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-purple-500">
-                <div class="text-3xl font-bold text-purple-600 mb-2">{period}</div>
-                <div class="text-gray-600 font-medium">Period (sec)</div>
+            <div class="bg-white border border-gray-300 aspect-square p-4 text-center flex flex-col justify-center">
+                <div class="text-2xl font-bold text-black mb-2">{period}</div>
+                <div class="text-sm text-gray-600 font-medium">PERIOD</div>
+                <div class="text-xs text-gray-500 mt-1">seconds</div>
             </div>
             
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-green-500">
-                <div class="text-3xl font-bold text-green-600 mb-2">{tide_height}</div>
-                <div class="text-gray-600 font-medium">Tide Height (ft)</div>
+            <div class="bg-white border border-gray-300 aspect-square p-4 text-center flex flex-col justify-center">
+                <div class="text-2xl font-bold text-black mb-2">{tide_height}</div>
+                <div class="text-sm text-gray-600 font-medium">TIDE {tide_direction}</div>
+                <div class="text-xs text-gray-500 mt-1">{tide_status} at {tide_time}</div>
             </div>
             
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-cyan-500">
-                <div class="text-3xl font-bold text-cyan-600 mb-2">{wind_speed}</div>
-                <div class="text-gray-600 font-medium">Wind Speed (mph)</div>
-                <div class="text-sm text-gray-500 mt-1">{wind_direction}°</div>
-            </div>
-            
-            <div class="bg-white rounded-xl shadow-lg p-6 text-center border-l-4 border-orange-500">
-                <div class="text-3xl font-bold text-orange-600 mb-2">{water_temp}</div>
-                <div class="text-gray-600 font-medium">Water Temp (°F)</div>
+            <div class="bg-white border border-gray-300 aspect-square p-4 text-center flex flex-col justify-center">
+                <div class="text-2xl font-bold text-black mb-2">{wind_speed}</div>
+                <div class="text-sm text-gray-600 font-medium">WIND</div>
+                <div class="text-xs text-gray-500 mt-1">{wind_direction}° mph</div>
             </div>
         </div>
         
-        <!-- Simple Charts Section -->
+        <!-- Charts Section -->
         <div class="max-w-6xl mx-auto mb-8">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <!-- Wave Height Chart -->
-                <div class="bg-white rounded-xl shadow-lg p-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">Wave Height (7-Day)</h3>
-                    <div style="height: 250px; position: relative;">
+                <div class="bg-white border border-gray-300 p-4">
+                    <h3 class="text-sm font-bold text-black mb-4 text-center uppercase">WAVE HEIGHT (7-DAY)</h3>
+                    <div style="height: 200px; position: relative;">
                         <canvas id="waveChart"></canvas>
                     </div>
                 </div>
                 
                 <!-- Wave Period Chart -->
-                <div class="bg-white rounded-xl shadow-lg p-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">Wave Period (7-Day)</h3>
-                    <div style="height: 250px; position: relative;">
+                <div class="bg-white border border-gray-300 p-4">
+                    <h3 class="text-sm font-bold text-black mb-4 text-center uppercase">WAVE PERIOD (7-DAY)</h3>
+                    <div style="height: 200px; position: relative;">
                         <canvas id="periodChart"></canvas>
                     </div>
                 </div>
                 
                 <!-- Tide Height Chart -->
-                <div class="bg-white rounded-xl shadow-lg p-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">Tide Height (7-Day)</h3>
-                    <div style="height: 250px; position: relative;">
+                <div class="bg-white border border-gray-300 p-4">
+                    <h3 class="text-sm font-bold text-black mb-4 text-center uppercase">TIDE HEIGHT (7-DAY)</h3>
+                    <div style="height: 200px; position: relative;">
                         <canvas id="tideChart"></canvas>
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- Footer -->
-        <div class="text-center mt-8 text-gray-500 text-sm">
-            <p class="font-medium">Updates every 15 minutes</p>
-            <p>Last updated: {last_updated}</p>
-        </div>
+
     </div>
     
+    <!-- Bottom Footer -->
+    <footer class="border-t border-gray-200 mt-12 py-6">
+        <div class="container mx-auto px-4 text-center">
+                    <div class="text-center mt-8 text-gray-600 text-xs">
+            <p class="font-medium uppercase">UPDATES EVERY 15 MINUTES</p>
+            <p>LAST UPDATED: {last_updated}</p>
+        </div>
+        <br>
+            <div class="flex justify-center space-x-6 text-xs text-gray-600">
+                <a href="https://github.com/abenstirling/DuckDive" target="_blank" rel="noopener noreferrer" class="hover:text-black transition-colors">
+                    GITHUB REPO
+                </a>
+                <a href="https://www.ndbc.noaa.gov/" target="_blank" rel="noopener noreferrer" class="hover:text-black transition-colors">
+                    NOAA DATA
+                </a>
+            </div>
+        </div>
+    </footer>
+    
     <script>
-        // Spot selector
-        document.getElementById('spotSelector').addEventListener('change', function() {
-            const selectedSpot = this.value;
-            if (selectedSpot) {
-                window.location.href = '/' + selectedSpot;
+        // Custom dropdown functionality
+        const dropdownButton = document.getElementById('dropdownButton');
+        const dropdownMenu = document.getElementById('dropdownMenu');
+        const dropdownArrow = document.getElementById('dropdownArrow');
+        const selectedSpot = document.getElementById('selectedSpot');
+        const hiddenSelect = document.getElementById('hiddenSelect');
+
+        // Populate custom dropdown from hidden select
+        function populateDropdown() {
+            const options = hiddenSelect.querySelectorAll('option');
+            dropdownMenu.innerHTML = '';
+            
+            options.forEach(option => {
+                if (option.value) {
+                    const div = document.createElement('div');
+                    div.className = 'px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm';
+                    div.textContent = option.textContent;
+                    div.setAttribute('data-spot', option.value);
+                    dropdownMenu.appendChild(div);
+                    
+                    // Set current selected spot
+                    if (option.selected) {
+                        selectedSpot.textContent = option.textContent;
+                    }
+                }
+            });
+        }
+
+        // Initialize dropdown
+        populateDropdown();
+
+        // Toggle dropdown
+        dropdownButton.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const isHidden = dropdownMenu.classList.contains('hidden');
+            if (isHidden) {
+                dropdownMenu.classList.remove('hidden');
+                dropdownArrow.style.transform = 'rotate(180deg)';
+            } else {
+                dropdownMenu.classList.add('hidden');
+                dropdownArrow.style.transform = 'rotate(0deg)';
+            }
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function() {
+            dropdownMenu.classList.add('hidden');
+            dropdownArrow.style.transform = 'rotate(0deg)';
+        });
+
+        // Handle spot selection
+        dropdownMenu.addEventListener('click', function(e) {
+            if (e.target.getAttribute('data-spot')) {
+                const spot = e.target.getAttribute('data-spot');
+                const spotName = e.target.textContent;
+                selectedSpot.textContent = spotName;
+                dropdownMenu.classList.add('hidden');
+                dropdownArrow.style.transform = 'rotate(0deg)';
+                if (spot) {
+                    window.location.href = '/' + spot;
+                }
             }
         });
 
@@ -101,13 +195,51 @@
         const waveData = WAVE_DATA_PLACEHOLDER;
         const periodData = PERIOD_DATA_PLACEHOLDER;
         const tideData = TIDE_DATA_PLACEHOLDER;
+        const tideLabels = typeof TIDE_LABELS_PLACEHOLDER !== 'undefined' ? TIDE_LABELS_PLACEHOLDER : null;
 
         // Simple chart configuration
         const simpleConfig = {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: false }
+                legend: { display: false },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: 'white',
+                    bodyColor: 'white',
+                    borderColor: 'black',
+                    borderWidth: 1
+                }
+            },
+            scales: {
+                y: { beginAtZero: true },
+                x: { display: false }
+            }
+        };
+
+        // Tide chart specific configuration with time labels
+        const tideConfig = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: 'white',
+                    bodyColor: 'white',
+                    borderColor: 'black',
+                    borderWidth: 1,
+                    callbacks: {
+                        title: function(context) {
+                            return tideLabels && tideLabels[context[0].dataIndex] ? tideLabels[context[0].dataIndex] : 'Time';
+                        },
+                        label: function(context) {
+                            return 'Tide: ' + context.parsed.y + ' ft';
+                        }
+                    }
+                }
             },
             scales: {
                 y: { beginAtZero: true },
@@ -123,10 +255,10 @@
                     labels: Array.from({length: waveData.length}, (_, i) => ''),
                     datasets: [{
                         data: waveData,
-                        borderColor: 'rgb(59, 130, 246)',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.4,
+                        borderColor: 'rgb(0, 0, 0)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                        borderWidth: 1,
+                        tension: 0,
                         fill: true,
                         pointRadius: 0
                     }]
@@ -143,10 +275,10 @@
                     labels: Array.from({length: periodData.length}, (_, i) => ''),
                     datasets: [{
                         data: periodData,
-                        borderColor: 'rgb(147, 51, 234)',
-                        backgroundColor: 'rgba(147, 51, 234, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.4,
+                        borderColor: 'rgb(0, 0, 0)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                        borderWidth: 1,
+                        tension: 0,
                         fill: true,
                         pointRadius: 0
                     }]
@@ -163,15 +295,15 @@
                     labels: Array.from({length: tideData.length}, (_, i) => ''),
                     datasets: [{
                         data: tideData,
-                        borderColor: 'rgb(34, 197, 94)',
-                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.4,
+                        borderColor: 'rgb(0, 0, 0)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                        borderWidth: 1,
+                        tension: 0,
                         fill: true,
                         pointRadius: 0
                     }]
                 },
-                options: simpleConfig
+                options: tideConfig
             });
         }
     </script>
