@@ -130,10 +130,11 @@ def get_supabase_client():
     """Initialize Supabase client with environment variables"""
     try:
         url = os.environ.get('SUPABASE_URL')
-        key = os.environ.get('SUPABASE_ANON_KEY')
+        # Try service role key first (for writes), fallback to anon key
+        key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY') or os.environ.get('SUPABASE_ANON_KEY')
         
         if not url or not key:
-            raise Exception("SUPABASE_URL and SUPABASE_ANON_KEY environment variables are required")
+            raise Exception("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) environment variables are required")
         
         supabase: Client = create_client(url, key)
         return supabase

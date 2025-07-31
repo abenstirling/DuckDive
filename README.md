@@ -275,5 +275,3 @@ This project is open source and available under the [MIT License](LICENSE).
 ---
 
 **Made with ❤️ for the surf community**
-
-*DuckDive provides free, accurate surf forecasts using open data sources. No API keys, no subscriptions, just pure oceanographic data.*

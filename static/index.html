@@ -196,11 +196,48 @@
         const periodData = PERIOD_DATA_PLACEHOLDER;
         const tideData = TIDE_DATA_PLACEHOLDER;
         const tideLabels = typeof TIDE_LABELS_PLACEHOLDER !== 'undefined' ? TIDE_LABELS_PLACEHOLDER : null;
+        
+        // Generate day labels for 7-day charts (wave and period)
+        function generateDayLabels(dataLength) {
+            const labels = [];
+            const today = new Date();
+            const pointsPerDay = Math.floor(dataLength / 7); // Assuming 7 days of data
+            
+            for (let i = 0; i < dataLength; i++) {
+                if (i % pointsPerDay === 0) {
+                    const day = new Date(today);
+                    day.setDate(today.getDate() + Math.floor(i / pointsPerDay));
+                    labels.push(day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+                } else {
+                    labels.push('');
+                }
+            }
+            return labels;
+        }
+        
+        // Generate tide labels for x-axis (simplified day format)
+        function generateTideDayLabels() {
+            if (!tideLabels) return [];
+            
+            return tideLabels.map((label, index) => {
+                // Show day label every few points to avoid crowding
+                if (index % 4 === 0) {
+                    const date = new Date(label);
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }
+                return '';
+            });
+        }
 
         // Simple chart configuration
         const simpleConfig = {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    bottom: 10 // Add padding to prevent label cutoff
+                }
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -213,8 +250,34 @@
                 }
             },
             scales: {
-                y: { beginAtZero: true },
-                x: { display: false }
+                y: { 
+                    beginAtZero: true,
+                    grid: {
+                        display: true,
+                        color: 'rgba(0, 0, 0, 0.1)'
+                    }
+                },
+                x: { 
+                    display: true,
+                    ticks: {
+                        font: {
+                            size: 11,
+                            family: 'JetBrains Mono'
+                        },
+                        color: '#333',
+                        maxRotation: 0,  // Keep labels horizontal
+                        minRotation: 0   // Keep labels horizontal
+                    },
+                    grid: {
+                        display: true,
+                        color: 'rgba(0, 0, 0, 0.2)',
+                        lineWidth: function(context) {
+                            // Make grid lines for days thicker
+                            const label = context.chart.data.labels[context.index];
+                            return (label && label.trim() !== '') ? 2 : 1;
+                        }
+                    }
+                }
             }
         };
 
@@ -222,6 +285,11 @@
         const tideConfig = {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    bottom: 10 // Add padding to prevent label cutoff
+                }
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -242,8 +310,34 @@
                 }
             },
             scales: {
-                y: { beginAtZero: true },
-                x: { display: false }
+                y: { 
+                    beginAtZero: true,
+                    grid: {
+                        display: true,
+                        color: 'rgba(0, 0, 0, 0.1)'
+                    }
+                },
+                x: { 
+                    display: true,
+                    ticks: {
+                        font: {
+                            size: 11,
+                            family: 'JetBrains Mono'
+                        },
+                        color: '#333',
+                        maxRotation: 0,  // Keep labels horizontal
+                        minRotation: 0   // Keep labels horizontal
+                    },
+                    grid: {
+                        display: true,
+                        color: 'rgba(0, 0, 0, 0.2)',
+                        lineWidth: function(context) {
+                            // Make grid lines for days thicker
+                            const label = context.chart.data.labels[context.index];
+                            return (label && label.trim() !== '') ? 2 : 1;
+                        }
+                    }
+                }
             }
         };
 
@@ -252,7 +346,7 @@
             new Chart(document.getElementById('waveChart'), {
                 type: 'line',
                 data: {
-                    labels: Array.from({length: waveData.length}, (_, i) => ''),
+                    labels: generateDayLabels(waveData.length),
                     datasets: [{
                         data: waveData,
                         borderColor: 'rgb(0, 0, 0)',
@@ -272,7 +366,7 @@
             new Chart(document.getElementById('periodChart'), {
                 type: 'line',
                 data: {
-                    labels: Array.from({length: periodData.length}, (_, i) => ''),
+                    labels: generateDayLabels(periodData.length),
                     datasets: [{
                         data: periodData,
                         borderColor: 'rgb(0, 0, 0)',
@@ -292,7 +386,7 @@
             new Chart(document.getElementById('tideChart'), {
                 type: 'line',
                 data: {
-                    labels: Array.from({length: tideData.length}, (_, i) => ''),
+                    labels: generateTideDayLabels(),
                     datasets: [{
                         data: tideData,
                         borderColor: 'rgb(0, 0, 0)',
