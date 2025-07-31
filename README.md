@@ -95,19 +95,24 @@ name,closest_station,location_n,closest_tide,location_w,altitude,depth,angle,slo
 
 ```
 DuckDive/
-├── main.py                           # FastAPI web application
-├── surf_report_update_spot.py        # Main data orchestration
-├── surf_report_wave_height.py        # Wave height forecasting
-├── surf_report_tides.py              # Tide data fetching
-├── surf_report_winds.py              # Wind conditions
-├── surf_report_water_temperature.py  # Water temperature
-├── surf_report_period.py             # Wave period data
-├── static/
-│   └── index.html                    # Frontend template
-├── surf_spots.csv                    # Surf spot configurations
-├── requirements.txt                  # Python dependencies
-├── build.sh                          # Build script
-└── surfpy/                          # NOAA data library
+├── main.py                     # FastAPI web application
+├── backend/                    # Backend data processing modules
+│   ├── __init__.py            # Package initialization
+│   ├── surf_report_update_spot.py        # Main data orchestration
+│   ├── surf_report_wave_height.py        # Wave height forecasting
+│   ├── surf_report_tides.py              # Tide data fetching
+│   ├── surf_report_winds.py              # Wind conditions
+│   ├── surf_report_water_temperature.py  # Water temperature
+│   └── surf_report_period.py             # Wave period data
+├── static/                     # Frontend assets
+│   ├── index.html             # Main HTML template
+│   ├── duck_dive_favicon.png  # Site favicon
+│   └── duck_dive_screenshot.png # Documentation screenshot
+├── surf_spots.csv             # Surf spot configurations
+├── stations.csv               # NOAA station reference data
+├── requirements.txt           # Python dependencies
+├── build.sh                   # Build script
+└── surfpy/                    # NOAA data library (submodule)
 ```
 
 ## 🔌 API Endpoints
