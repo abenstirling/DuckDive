@@ -313,39 +313,86 @@ async def get_report(spot: str):
 @app.post("/api/update_spot")
 @app.get("/api/update_spot")
 async def update_spot(request: Request):
-    """Update surf spot data - supports ?spot=spotname query parameter"""
+    """Update surf spot data - supports ?spot=spotname query parameter or updates all spots if no spot specified"""
     from surf_report_update_spot import update_spot_to_supabase
     
     # Get spot from query parameter
     spot_name = request.query_params.get('spot')
     
     if not spot_name:
-        return {
-            "status": "error",
-            "message": "Missing 'spot' query parameter. Use ?spot=spotname",
-            "example": "/api/update_spot?spot=Tamarack",
-            "timestamp": datetime.now().isoformat()
-        }
+        # No spot specified - update all spots
+        try:
+            results = []
+            total_success = 0
+            total_failed = 0
+            
+            for spot_key, spot_info in SURF_SPOTS.items():
+                try:
+                    logging.info(f"Updating spot: {spot_info['name']}")
+                    result = update_spot_to_supabase(spot_info['name'])
+                    
+                    if result["status"] == "success":
+                        total_success += 1
+                        logging.info(f"Successfully updated surf spot: {spot_info['name']}")
+                    else:
+                        total_failed += 1
+                        logging.error(f"Failed to update surf spot {spot_info['name']}: {result['message']}")
+                    
+                    results.append({
+                        "spot": spot_info['name'],
+                        "status": result["status"],
+                        "message": result.get("message", "")
+                    })
+                    
+                except Exception as e:
+                    total_failed += 1
+                    error_msg = f"Error updating spot {spot_info['name']}: {str(e)}"
+                    logging.error(error_msg)
+                    results.append({
+                        "spot": spot_info['name'],
+                        "status": "error",
+                        "message": error_msg
+                    })
+            
+            return {
+                "status": "completed",
+                "message": f"Updated all spots: {total_success} successful, {total_failed} failed",
+                "total_spots": len(SURF_SPOTS),
+                "successful": total_success,
+                "failed": total_failed,
+                "results": results,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logging.error(f"Error updating all spots: {e}")
+            return {
+                "status": "error",
+                "message": f"Unexpected error updating all spots: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            }
     
-    try:
-        # Call the surf report update function
-        result = update_spot_to_supabase(spot_name)
-        
-        if result["status"] == "success":
-            logging.info(f"Successfully updated surf spot: {spot_name}")
-        else:
-            logging.error(f"Failed to update surf spot {spot_name}: {result['message']}")
-        
-        return result
-        
-    except Exception as e:
-        logging.error(f"Error updating spot {spot_name}: {e}")
-        return {
-            "status": "error",
-            "message": f"Unexpected error: {str(e)}",
-            "spot_name": spot_name,
-            "timestamp": datetime.now().isoformat()
-        }
+    else:
+        # Single spot specified
+        try:
+            # Call the surf report update function
+            result = update_spot_to_supabase(spot_name)
+            
+            if result["status"] == "success":
+                logging.info(f"Successfully updated surf spot: {spot_name}")
+            else:
+                logging.error(f"Failed to update surf spot {spot_name}: {result['message']}")
+            
+            return result
+            
+        except Exception as e:
+            logging.error(f"Error updating spot {spot_name}: {e}")
+            return {
+                "status": "error",
+                "message": f"Unexpected error: {str(e)}",
+                "spot_name": spot_name,
+                "timestamp": datetime.now().isoformat()
+            }
 
 @app.post("/api/new_spot_request")
 async def new_spot_request(email: str, spot_name: str):
