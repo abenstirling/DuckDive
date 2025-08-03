@@ -76,6 +76,21 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
     wind_direction = current['wind_direction']
     period = current['period']
     
+    # Get timestamp from database data
+    db_timestamp = data.get('timestamp')
+    if db_timestamp:
+        try:
+            # Parse ISO timestamp from database and format for display
+            from datetime import datetime
+            timestamp_dt = datetime.fromisoformat(db_timestamp.replace('Z', '+00:00'))
+            formatted_timestamp = timestamp_dt.strftime('%I:%M %p on %B %d, %Y')
+        except (ValueError, AttributeError):
+            # Fallback to current time if parsing fails
+            formatted_timestamp = datetime.now().strftime('%I:%M %p on %B %d, %Y')
+    else:
+        # Fallback to current time if no timestamp in database
+        formatted_timestamp = datetime.now().strftime('%I:%M %p on %B %d, %Y')
+    
     # Get stream link
     stream_link = data.get('stream_link')
     
@@ -172,7 +187,7 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
     html = html.replace('{wind_speed}', str(wind_speed))
     html = html.replace('{wind_direction}', str(wind_direction))
     html = html.replace('{water_temp}', str(water_temp))
-    html = html.replace('{last_updated}', datetime.now().strftime('%I:%M %p on %B %d, %Y'))
+    html = html.replace('{last_updated}', formatted_timestamp)
     
     # Replace chart data placeholders with JSON data
     import json
