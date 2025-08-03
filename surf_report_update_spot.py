@@ -158,6 +158,54 @@ def update_spot_to_supabase(spot_name, table_name="surf_reports"):
                 "timestamp": datetime.datetime.now().isoformat()
             }
         
+        # Validate data - check for null values (except stream_link which can be null)
+        validation_errors = []
+        required_fields = [
+            'water_temp_f',
+            'wind_speed_mph', 
+            'wind_direction_deg',
+            'wave_forecast_168h',
+            'period_forecast_168h',
+            'tide_forecast_7d'
+        ]
+        
+        for field in required_fields:
+            value = report_data.get(field)
+            if value is None:
+                validation_errors.append(f"{field} is null")
+            elif isinstance(value, list) and len(value) == 0:
+                validation_errors.append(f"{field} is empty")
+        
+        # Check if essential forecast data is present and valid
+        if report_data.get('wave_forecast_168h'):
+            wave_data = report_data['wave_forecast_168h']
+            if not isinstance(wave_data, list) or len(wave_data) < 24:  # At least 1 day of data
+                validation_errors.append("wave_forecast_168h has insufficient data (less than 24 hours)")
+        
+        if report_data.get('period_forecast_168h'):
+            period_data = report_data['period_forecast_168h']  
+            if not isinstance(period_data, list) or len(period_data) < 24:  # At least 1 day of data
+                validation_errors.append("period_forecast_168h has insufficient data (less than 24 hours)")
+        
+        if report_data.get('tide_forecast_7d'):
+            tide_data = report_data['tide_forecast_7d']
+            if not isinstance(tide_data, list) or len(tide_data) < 4:  # At least 4 tide events
+                validation_errors.append("tide_forecast_7d has insufficient data (less than 4 tide events)")
+        
+        # If validation fails, return error without updating database
+        if validation_errors:
+            error_message = f"Validation failed for {spot_name}: " + "; ".join(validation_errors)
+            print(f"❌ {error_message}")
+            return {
+                "status": "error",
+                "message": error_message,
+                "validation_errors": validation_errors,
+                "spot_name": spot_name,
+                "timestamp": datetime.datetime.now().isoformat()
+            }
+        
+        print(f"✅ Data validation passed for {spot_name}")
+        
         # Initialize Supabase client
         supabase = get_supabase_client()
         if not supabase:
