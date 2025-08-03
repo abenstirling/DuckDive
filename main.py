@@ -118,6 +118,18 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
             if len(entry) >= 1:
                 tide_chart_data.append(entry[0])  # tide height
     
+    # Create daily labels for x-axis (7 days)
+    from datetime import datetime, timedelta
+    daily_labels = []
+    for i in range(7):
+        date = datetime.now() + timedelta(days=i)
+        if i == 0:
+            daily_labels.append("Today")
+        elif i == 1:
+            daily_labels.append("Tomorrow")
+        else:
+            daily_labels.append(date.strftime("%m/%d"))
+    
     # Create dropdown options
     dropdown_options = ""
     for spot_name, spot_info in SURF_SPOTS.items():
@@ -195,6 +207,7 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
     html = html.replace('PERIOD_DATA_PLACEHOLDER', json.dumps(period_chart_data))
     html = html.replace('TIDE_DATA_PLACEHOLDER', json.dumps(tide_chart_data))
     html = html.replace('TIDE_LABELS_PLACEHOLDER', json.dumps(tide_labels))
+    html = html.replace('DAILY_LABELS_PLACEHOLDER', json.dumps(daily_labels))
     
     return html
 

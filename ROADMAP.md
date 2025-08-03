@@ -1,5 +1,5 @@
 ## 
-- [ ] analytics
+- [x] analytics
 - [ ] cron updating (15 min)
 
 - [ ] Accounts 

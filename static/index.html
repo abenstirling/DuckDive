@@ -205,6 +205,7 @@
         const periodData = PERIOD_DATA_PLACEHOLDER;
         const tideData = TIDE_DATA_PLACEHOLDER;
         const tideLabels = typeof TIDE_LABELS_PLACEHOLDER !== 'undefined' ? TIDE_LABELS_PLACEHOLDER : null;
+        const dailyLabels = typeof DAILY_LABELS_PLACEHOLDER !== 'undefined' ? DAILY_LABELS_PLACEHOLDER : ["Today", "Tomorrow", "08/05", "08/06", "08/07", "08/08", "08/09"];
 
         // Simple chart configuration
         const simpleConfig = {
@@ -223,7 +224,13 @@
             },
             scales: {
                 y: { beginAtZero: true },
-                x: { display: false }
+                x: { 
+                    display: true,
+                    ticks: {
+                        maxTicksLimit: 7,
+                        font: { size: 10 }
+                    }
+                }
             }
         };
 
@@ -252,16 +259,33 @@
             },
             scales: {
                 y: { beginAtZero: true },
-                x: { display: false }
+                x: { 
+                    display: true,
+                    ticks: {
+                        maxTicksLimit: 7,
+                        font: { size: 10 }
+                    }
+                }
             }
         };
 
         // Create Wave Chart
         if (waveData && waveData.length > 0) {
+            // Create labels for wave chart (56 data points = 7 days, 8 points per day)
+            const waveLabels = [];
+            for (let i = 0; i < waveData.length; i++) {
+                const dayIndex = Math.floor(i / 8); // 8 points per day (3-hour intervals)
+                if (i % 8 === 0 && dayIndex < dailyLabels.length) {
+                    waveLabels.push(dailyLabels[dayIndex]);
+                } else {
+                    waveLabels.push('');
+                }
+            }
+            
             new Chart(document.getElementById('waveChart'), {
                 type: 'line',
                 data: {
-                    labels: Array.from({length: waveData.length}, (_, i) => ''),
+                    labels: waveLabels,
                     datasets: [{
                         data: waveData,
                         borderColor: 'rgb(0, 0, 0)',
@@ -278,10 +302,21 @@
 
         // Create Period Chart
         if (periodData && periodData.length > 0) {
+            // Create labels for period chart (56 data points = 7 days, 8 points per day)
+            const periodLabels = [];
+            for (let i = 0; i < periodData.length; i++) {
+                const dayIndex = Math.floor(i / 8); // 8 points per day (3-hour intervals)
+                if (i % 8 === 0 && dayIndex < dailyLabels.length) {
+                    periodLabels.push(dailyLabels[dayIndex]);
+                } else {
+                    periodLabels.push('');
+                }
+            }
+            
             new Chart(document.getElementById('periodChart'), {
                 type: 'line',
                 data: {
-                    labels: Array.from({length: periodData.length}, (_, i) => ''),
+                    labels: periodLabels,
                     datasets: [{
                         data: periodData,
                         borderColor: 'rgb(0, 0, 0)',
@@ -298,10 +333,22 @@
 
         // Create Tide Chart
         if (tideData && tideData.length > 0) {
+            // Create simplified labels for tide chart - show daily labels at regular intervals
+            const tideDisplayLabels = [];
+            const pointsPerDay = Math.floor(tideData.length / 7); // Approximate points per day
+            for (let i = 0; i < tideData.length; i++) {
+                const dayIndex = Math.floor(i / pointsPerDay);
+                if (i % pointsPerDay === 0 && dayIndex < dailyLabels.length) {
+                    tideDisplayLabels.push(dailyLabels[dayIndex]);
+                } else {
+                    tideDisplayLabels.push('');
+                }
+            }
+            
             new Chart(document.getElementById('tideChart'), {
                 type: 'line',
                 data: {
-                    labels: Array.from({length: tideData.length}, (_, i) => ''),
+                    labels: tideDisplayLabels,
                     datasets: [{
                         data: tideData,
                         borderColor: 'rgb(0, 0, 0)',
