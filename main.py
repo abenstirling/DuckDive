@@ -327,7 +327,7 @@ async def get_report(spot: str):
 @app.get("/api/update_spot")
 async def update_spot(request: Request):
     """Update surf spot data - supports ?spot=spotname query parameter or updates all spots if no spot specified"""
-    from surf_report_update_spot import update_spot_to_supabase
+    from surf_reports.surf_report_update_spot import update_spot_to_supabase
     
     # Get spot from query parameter
     spot_name = request.query_params.get('spot')

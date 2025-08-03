@@ -9,11 +9,11 @@ from supabase import create_client, Client
 
 # Load environment variables from .env file
 load_dotenv()
-from surf_report_wave_height import get_surf_forecast
-from surf_report_water_temperature import get_water_temp_forecast
-from surf_report_winds import get_current_wind
-from surf_report_tides import get_tide_forecast
-from surf_report_period import get_period_forecast
+from .surf_report_wave_height import get_surf_forecast
+from .surf_report_water_temperature import get_water_temp_forecast
+from .surf_report_winds import get_current_wind
+from .surf_report_tides import get_tide_forecast
+from .surf_report_period import get_period_forecast
 
 def get_surf_spot_data(spot_name, csv_file="surf_spots.csv"):
     """
