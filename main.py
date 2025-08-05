@@ -323,19 +323,13 @@ async def get_report(spot: str):
         logging.error(f"Database error: {e}")
         raise HTTPException(status_code=500, detail="Database error")
 
-@app.post("/api/update_spot")
-@app.get("/api/update_spot")
-async def update_spot(request: Request):
-    """Update surf spot data - supports ?spot=spotname query parameter or updates all spots if no spot specified"""
+async def _update_spot_background(spot_name: str = None):
+    """Background task to update surf spot data"""
     from surf_reports.surf_report_update_spot import update_spot_to_supabase
-    
-    # Get spot from query parameter
-    spot_name = request.query_params.get('spot')
     
     if not spot_name:
         # No spot specified - update all spots
         try:
-            results = []
             total_success = 0
             total_failed = 0
             
@@ -351,44 +345,19 @@ async def update_spot(request: Request):
                         total_failed += 1
                         logging.error(f"Failed to update surf spot {spot_info['name']}: {result['message']}")
                     
-                    results.append({
-                        "spot": spot_info['name'],
-                        "status": result["status"],
-                        "message": result.get("message", "")
-                    })
-                    
                 except Exception as e:
                     total_failed += 1
                     error_msg = f"Error updating spot {spot_info['name']}: {str(e)}"
                     logging.error(error_msg)
-                    results.append({
-                        "spot": spot_info['name'],
-                        "status": "error",
-                        "message": error_msg
-                    })
             
-            return {
-                "status": "completed",
-                "message": f"Updated all spots: {total_success} successful, {total_failed} failed",
-                "total_spots": len(SURF_SPOTS),
-                "successful": total_success,
-                "failed": total_failed,
-                "results": results,
-                "timestamp": datetime.now().isoformat()
-            }
+            logging.info(f"Background update completed: {total_success} successful, {total_failed} failed")
             
         except Exception as e:
             logging.error(f"Error updating all spots: {e}")
-            return {
-                "status": "error",
-                "message": f"Unexpected error updating all spots: {str(e)}",
-                "timestamp": datetime.now().isoformat()
-            }
     
     else:
         # Single spot specified
         try:
-            # Call the surf report update function
             result = update_spot_to_supabase(spot_name)
             
             if result["status"] == "success":
@@ -396,16 +365,28 @@ async def update_spot(request: Request):
             else:
                 logging.error(f"Failed to update surf spot {spot_name}: {result['message']}")
             
-            return result
-            
         except Exception as e:
             logging.error(f"Error updating spot {spot_name}: {e}")
-            return {
-                "status": "error",
-                "message": f"Unexpected error: {str(e)}",
-                "spot_name": spot_name,
-                "timestamp": datetime.now().isoformat()
-            }
+
+@app.post("/api/update_spot")
+@app.get("/api/update_spot")
+async def update_spot(request: Request):
+    """Kick off surf spot data update - supports ?spot=spotname query parameter or updates all spots if no spot specified"""
+    import asyncio
+    
+    # Get spot from query parameter
+    spot_name = request.query_params.get('spot')
+    
+    # Start the background task without awaiting it
+    asyncio.create_task(_update_spot_background(spot_name))
+    
+    # Return immediate response
+    if spot_name:
+        logging.info(f"Started background update for spot: {spot_name}")
+        return {"message": f"Update started for spot: {spot_name}"}
+    else:
+        logging.info("Started background update for all spots")
+        return {"message": "Update started for all spots"}
 
 @app.post("/api/new_spot_request")
 async def new_spot_request(email: str, spot_name: str):
