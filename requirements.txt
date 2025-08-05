@@ -8,3 +8,4 @@ requests
 pytz
 setuptools>=45
 wheel
+pygrib
