@@ -1,7 +1,6 @@
 ## 
 - [x] analytics
 - [ ] cron updating (15 min)
-
 - [ ] Accounts 
     - [ ] Google 
     - [ ] Apple 

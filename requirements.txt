@@ -8,3 +8,4 @@ requests
 pytz
 setuptools>=45
 wheel
+mcp>=1.0.0
