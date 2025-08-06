@@ -9,6 +9,7 @@ import random
 from supabase import create_client, Client
 import uvicorn
 from datetime import datetime
+import pytz
 import asyncio
 from typing import Dict, Any
 import logging
@@ -25,6 +26,11 @@ supabase: Client = create_client(
 )
 
 # Load surf spots from CSV
+def get_pst_timestamp():
+    """Get current timestamp in PST/PDT timezone"""
+    pst = pytz.timezone('America/Los_Angeles')
+    return datetime.now(pst)
+
 def load_surf_spots():
     """Load surf spots from CSV file"""
     spots = {}
@@ -80,16 +86,18 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
     db_timestamp = data.get('timestamp')
     if db_timestamp:
         try:
-            # Parse ISO timestamp from database and format for display
+            # Parse ISO timestamp from database, convert to PST, and format for display
             from datetime import datetime
             timestamp_dt = datetime.fromisoformat(db_timestamp.replace('Z', '+00:00'))
-            formatted_timestamp = timestamp_dt.strftime('%I:%M %p on %B %d, %Y')
+            pst = pytz.timezone('America/Los_Angeles')
+            pst_timestamp = timestamp_dt.astimezone(pst)
+            formatted_timestamp = pst_timestamp.strftime('%I:%M %p PST on %B %d, %Y')
         except (ValueError, AttributeError):
             # Fallback to current time if parsing fails
-            formatted_timestamp = datetime.now().strftime('%I:%M %p on %B %d, %Y')
+            formatted_timestamp = get_pst_timestamp().strftime('%I:%M %p PST on %B %d, %Y')
     else:
         # Fallback to current time if no timestamp in database
-        formatted_timestamp = datetime.now().strftime('%I:%M %p on %B %d, %Y')
+        formatted_timestamp = get_pst_timestamp().strftime('%I:%M %p PST on %B %d, %Y')
     
     # Get stream link
     stream_link = data.get('stream_link')
@@ -122,7 +130,7 @@ def get_html_template(spot: str, data: Dict[str, Any]) -> str:
     from datetime import datetime, timedelta
     daily_labels = []
     for i in range(7):
-        date = datetime.now() + timedelta(days=i)
+        date = get_pst_timestamp() + timedelta(days=i)
         if i == 0:
             daily_labels.append("Today")
         elif i == 1:
@@ -395,7 +403,7 @@ async def new_spot_request(email: str, spot_name: str):
         result = supabase.table('spot_requests').insert({
             "email": email,
             "spot_name": spot_name,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": get_pst_timestamp().isoformat(),
             "implemented": False
         }).execute()
         return {"status": "success", "message": "Spot request submitted"}

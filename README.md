@@ -11,7 +11,7 @@ A real-time surf forecasting application that provides accurate, localized surf 
 - **Tide Intelligence**: Shows tide direction (↑/↓) and next high/low tide times
 - **Mobile Responsive**: Clean, retro-inspired design that works on all devices
 - **Multiple Surf Spots**: Easy spot navigation with custom dropdown
-- **Auto-refresh**: Updates every 15 minutes for current conditions
+- **Auto-refresh**: Updates every hour for current conditions
 - **API Access**: RESTful endpoints for programmatic data access
 
 ## 🌊 How It Works
