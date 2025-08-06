@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel
 
 load_dotenv()
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -8,16 +9,82 @@ from fastapi.staticfiles import StaticFiles
 import random
 from supabase import create_client, Client
 import uvicorn
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import asyncio
 from typing import Dict, Any
 import logging
+import re
+from collections import defaultdict
+import time
 
 app = FastAPI()
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Rate limiting storage
+request_counts = defaultdict(list)
+RATE_LIMIT_REQUESTS = 5  # 5 requests
+RATE_LIMIT_WINDOW = 3600  # per hour (3600 seconds)
+
+class SpotRequest(BaseModel):
+    spot_name: str
+    email: str
+
+def get_client_ip(request: Request) -> str:
+    """Get client IP address from request"""
+    if "x-forwarded-for" in request.headers:
+        return request.headers["x-forwarded-for"].split(",")[0]
+    return request.client.host
+
+def is_rate_limited(client_ip: str) -> bool:
+    """Check if client IP is rate limited"""
+    now = time.time()
+    # Clean old requests outside the window
+    request_counts[client_ip] = [
+        timestamp for timestamp in request_counts[client_ip]
+        if now - timestamp < RATE_LIMIT_WINDOW
+    ]
+    
+    # Check if over limit
+    if len(request_counts[client_ip]) >= RATE_LIMIT_REQUESTS:
+        return True
+    
+    # Add current request
+    request_counts[client_ip].append(now)
+    return False
+
+def validate_spot_request(spot_name: str, email: str):
+    """Validate spot request data"""
+    # Validate spot name
+    if not spot_name or len(spot_name.strip()) < 2:
+        return False, "Spot name must be at least 2 characters"
+    
+    if len(spot_name.strip()) > 100:
+        return False, "Spot name must be less than 100 characters"
+    
+    # Validate email format
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        return False, "Invalid email format"
+    
+    # Check for suspicious patterns
+    suspicious_patterns = [
+        r'<script',
+        r'javascript:',
+        r'<iframe',
+        r'onclick',
+        r'onerror',
+        r'eval\(',
+        r'alert\(',
+    ]
+    
+    for pattern in suspicious_patterns:
+        if re.search(pattern, spot_name, re.IGNORECASE) or re.search(pattern, email, re.IGNORECASE):
+            return False, "Invalid characters in request"
+    
+    return True, ""
 
 # Supabase client setup
 supabase: Client = create_client(
@@ -397,19 +464,55 @@ async def update_spot(request: Request):
         return {"message": "Update started for all spots"}
 
 @app.post("/api/new_spot_request")
-async def new_spot_request(email: str, spot_name: str):
-    """Submit new surf spot request"""
+async def new_spot_request(request: Request, spot_request: SpotRequest):
+    """Submit new surf spot request with rate limiting and validation"""
     try:
+        # Get client IP for rate limiting
+        client_ip = get_client_ip(request)
+        
+        # Check rate limit
+        if is_rate_limited(client_ip):
+            raise HTTPException(
+                status_code=429, 
+                detail=f"Rate limit exceeded. Maximum {RATE_LIMIT_REQUESTS} requests per hour allowed."
+            )
+        
+        # Validate input
+        is_valid, error_message = validate_spot_request(spot_request.spot_name, str(spot_request.email))
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_message)
+        
+        # Check for duplicate recent requests (same email within 24 hours)
+        twenty_four_hours_ago = get_pst_timestamp() - timedelta(hours=24)
+        existing_requests = supabase.table('spot_requests').select("*").eq(
+            'email', str(spot_request.email)
+        ).gte('timestamp', twenty_four_hours_ago.isoformat()).execute()
+        
+        if existing_requests.data and len(existing_requests.data) > 0:
+            raise HTTPException(
+                status_code=400, 
+                detail="You can only submit one spot request per 24 hours."
+            )
+        
+        # Insert request into database
         result = supabase.table('spot_requests').insert({
-            "email": email,
-            "spot_name": spot_name,
-            "timestamp": get_pst_timestamp().isoformat(),
-            "implemented": False
+            "email": str(spot_request.email),
+            "spot_name": spot_request.spot_name.strip(),
+            # Let database handle timestamp with default now()
         }).execute()
-        return {"status": "success", "message": "Spot request submitted"}
+        
+        if result.data:
+            logging.info(f"New spot request: {spot_request.spot_name} from {spot_request.email} (IP: {client_ip})")
+            return {"status": "success", "message": "Spot request submitted successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to submit request")
+            
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        logging.error(f"Database error: {e}")
-        raise HTTPException(status_code=500, detail="Database error")
+        logging.error(f"Database error in spot request: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

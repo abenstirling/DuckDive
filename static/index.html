@@ -131,9 +131,61 @@
                 <a href="https://www.ndbc.noaa.gov/" target="_blank" rel="noopener noreferrer" class="hover:text-black transition-colors">
                     NOAA DATA
                 </a>
+                <button id="requestSpotButton" class="hover:text-black transition-colors">
+                    REQUEST YOUR SPOT TO BE ADDED
+                </button>
             </div>
         </div>
     </footer>
+
+    <!-- Spot Request Modal -->
+    <div id="spotRequestModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-[100] flex items-center justify-center p-4">
+        <div class="bg-white border border-gray-300 max-w-md w-full p-6">
+            <h3 class="text-lg font-bold text-black mb-4 uppercase text-center">REQUEST NEW SURF SPOT</h3>
+            <form id="spotRequestForm">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-black mb-2">SPOT NAME</label>
+                    <input type="text" id="spotName" name="spotName" required 
+                           class="w-full px-3 py-2 border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-black"
+                           placeholder="e.g. Mavericks, Pipeline, etc.">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-black mb-2">LOCATION</label>
+                    <input type="text" id="location" name="location" required 
+                           class="w-full px-3 py-2 border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-black"
+                           placeholder="e.g. Half Moon Bay, CA">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-black mb-2">EMAIL</label>
+                    <input type="email" id="email" name="email" required 
+                           class="w-full px-3 py-2 border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-black"
+                           placeholder="your@email.com">
+                </div>
+                <div class="flex space-x-3">
+                    <button type="submit" 
+                            class="flex-1 bg-black text-white py-2 px-4 text-sm font-medium hover:bg-gray-800 transition-colors">
+                        SUBMIT REQUEST
+                    </button>
+                    <button type="button" id="cancelRequest"
+                            class="flex-1 border border-gray-300 bg-white text-black py-2 px-4 text-sm font-medium hover:bg-gray-50 transition-colors">
+                        CANCEL
+                    </button>
+                </div>
+            </form>
+            
+            <!-- Success Message -->
+            <div id="successMessage" class="hidden mt-4 p-3 bg-green-50 border border-green-300 text-center">
+                <p class="text-sm text-green-800 font-medium">✓ SPOT REQUEST SUBMITTED SUCCESSFULLY</p>
+                <p class="text-xs text-green-600 mt-1">We'll review your request and get back to you soon!</p>
+            </div>
+            
+            <!-- Error Message -->
+            <div id="errorMessage" class="hidden mt-4 p-3 bg-red-50 border border-red-300 text-center">
+                <p class="text-sm text-red-800 font-medium">✗ REQUEST FAILED</p>
+                <p class="text-xs text-red-600 mt-1" id="errorText">Please try again later.</p>
+            </div>
+        </div>
+    </div>
     
     <script>
         // Custom dropdown functionality
@@ -162,6 +214,17 @@
                     }
                 }
             });
+            
+            // Add separator and request option
+            const separator = document.createElement('div');
+            separator.className = 'border-t border-gray-200 my-1';
+            dropdownMenu.appendChild(separator);
+            
+            const requestDiv = document.createElement('div');
+            requestDiv.className = 'px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm font-medium text-gray-700';
+            requestDiv.textContent = '+ Request Your Spot';
+            requestDiv.setAttribute('data-action', 'request');
+            dropdownMenu.appendChild(requestDiv);
         }
 
         // Initialize dropdown
@@ -186,7 +249,7 @@
             dropdownArrow.style.transform = 'rotate(0deg)';
         });
 
-        // Handle spot selection
+        // Handle spot selection and request action
         dropdownMenu.addEventListener('click', function(e) {
             if (e.target.getAttribute('data-spot')) {
                 const spot = e.target.getAttribute('data-spot');
@@ -197,6 +260,10 @@
                 if (spot) {
                     window.location.href = '/' + spot;
                 }
+            } else if (e.target.getAttribute('data-action') === 'request') {
+                dropdownMenu.classList.add('hidden');
+                dropdownArrow.style.transform = 'rotate(0deg)';
+                openSpotRequestModal();
             }
         });
 
@@ -362,6 +429,79 @@
                 options: tideConfig
             });
         }
+
+        // Spot Request Modal Functionality
+        const spotRequestModal = document.getElementById('spotRequestModal');
+        const spotRequestForm = document.getElementById('spotRequestForm');
+        const requestSpotButton = document.getElementById('requestSpotButton');
+        const cancelRequest = document.getElementById('cancelRequest');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+
+        function openSpotRequestModal() {
+            spotRequestModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+            // Reset form
+            spotRequestForm.reset();
+            successMessage.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+        }
+
+        function closeSpotRequestModal() {
+            spotRequestModal.classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+
+        // Event listeners for modal
+        requestSpotButton.addEventListener('click', openSpotRequestModal);
+        cancelRequest.addEventListener('click', closeSpotRequestModal);
+        
+        // Close modal when clicking outside
+        spotRequestModal.addEventListener('click', function(e) {
+            if (e.target === spotRequestModal) {
+                closeSpotRequestModal();
+            }
+        });
+
+        // Handle form submission
+        spotRequestForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(spotRequestForm);
+            const spotName = formData.get('spotName');
+            const location = formData.get('location');
+            const email = formData.get('email');
+
+            try {
+                const response = await fetch('/api/new_spot_request', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        spot_name: spotName + ' (' + location + ')',
+                        email: email
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status === 'success') {
+                    successMessage.classList.remove('hidden');
+                    errorMessage.classList.add('hidden');
+                    spotRequestForm.reset();
+                    setTimeout(() => {
+                        closeSpotRequestModal();
+                    }, 2000);
+                } else {
+                    throw new Error(result.message || 'Request failed');
+                }
+            } catch (error) {
+                errorMessage.classList.remove('hidden');
+                successMessage.classList.add('hidden');
+                document.getElementById('errorText').textContent = error.message || 'Please try again later.';
+            }
+        });
     </script>
 </body>
 </html>
