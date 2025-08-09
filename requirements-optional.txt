@@ -1,0 +1,7 @@
+# Optional dependencies for surf report generation
+# These may have build issues on some platforms
+matplotlib>=3.8.0
+numpy>=1.26.0
+setuptools>=45
+wheel
+pygrib>=2.0.4

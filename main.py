@@ -12,18 +12,20 @@ import uvicorn
 from datetime import datetime, timedelta
 import pytz
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, Any
 import logging
 import re
 from collections import defaultdict
 import time
 
-# MCP imports
-from fastapi_mcp import FastAPIMCPServer
-from mcp.server import Server
-from mcp.types import Tool
+# MCP integration
+from fastapi_mcp import FastApiMCP
 
 app = FastAPI()
+
+# ===== MCP INTEGRATION =====
+# Initialize MCP with FastAPI app - exposes existing endpoints as MCP tools
+mcp = FastApiMCP(app)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -129,66 +131,6 @@ def load_surf_spots():
     return spots
 
 SURF_SPOTS = load_surf_spots()
-
-# ===== MCP TOOLS =====
-# MCP tool functions - reuse existing logic from HTTP endpoints
-
-def mcp_list_spots() -> List[Dict[str, str]]:
-    """MCP tool: Returns a list of available surf spots"""
-    spots_list = []
-    for spot_key, spot_info in SURF_SPOTS.items():
-        spots_list.append({
-            "key": spot_key,
-            "name": spot_info.get('name', spot_key.title()),
-            "latitude": str(spot_info.get('lat', '')),
-            "longitude": str(spot_info.get('lon', ''))
-        })
-    return spots_list
-
-async def mcp_get_report(spot: str) -> Dict[str, Any]:
-    """MCP tool: Get latest surf report for a spot - reuses get_report endpoint logic"""
-    try:
-        # Query by spot_name (new column) first, fallback to spot (old column) for compatibility - case insensitive
-        result = supabase.table('surf_reports').select('*').ilike('spot_name', spot).order('timestamp', desc=True).limit(1).execute()
-        if not result.data:
-            # Fallback to old 'spot' column if spot_name doesn't have data
-            result = supabase.table('surf_reports').select('*').ilike('spot', spot).order('timestamp', desc=True).limit(1).execute()
-        if result.data:
-            data = result.data[0]
-            
-            # Transform data for compatibility (same logic as HTTP endpoint)
-            transformed_data = {
-                'spot': data.get('spot_name', data.get('spot', spot)),
-                'timestamp': data.get('timestamp'),
-                'water_temp_f': data.get('water_temp_f'),
-                'wind_speed_mph': data.get('wind_speed_mph', data.get('wind_mph')),
-                'wind_direction_deg': data.get('wind_direction_deg'),
-                'stream_link': data.get('stream_link'),
-                'spot_config': data.get('spot_config', {}),
-                
-                # Wave data
-                'wave_forecast_168h': data.get('wave_forecast_168h', []),
-                'wave_height_forecast': data.get('wave_height_forecast', []),
-                
-                # Period data  
-                'period_forecast_168h': data.get('period_forecast_168h', []),
-                
-                # Tide data
-                'tide_forecast_7d': data.get('tide_forecast_7d', []),
-                'tide_height_forecast': data.get('tide_height_forecast', []),
-                
-                # Current conditions (extract from forecast data) - round to 1 decimal
-                'current_wave_height': round(data.get('wave_forecast_168h')[0][2], 1) if data.get('wave_forecast_168h') and len(data.get('wave_forecast_168h')) > 0 else 'Loading...',  # avg from first entry
-                'current_period': round(data.get('period_forecast_168h')[0][0], 1) if data.get('period_forecast_168h') and len(data.get('period_forecast_168h')) > 0 else 'Loading...',  # period from first entry
-                'current_tide_height': round(data.get('tide_forecast_7d')[0][0], 1) if data.get('tide_forecast_7d') and len(data.get('tide_forecast_7d')) > 0 else 'Loading...'  # height from first entry
-            }
-            
-            return transformed_data
-        else:
-            return {"error": "No data available", "spot": spot}
-    except Exception as e:
-        logging.error(f"MCP get_report error: {e}")
-        return {"error": str(e), "spot": spot}
 
 def get_current_conditions(data: Dict[str, Any]) -> Dict[str, Any]:
     """Extract current conditions from forecast data"""
@@ -465,7 +407,11 @@ async def get_report(spot: str):
 
 async def _update_spot_background(spot_name: str = None):
     """Background task to update surf spot data"""
-    from surf_reports.surf_report_update_spot import update_spot_to_supabase
+    try:
+        from surf_reports.surf_report_update_spot import update_spot_to_supabase
+    except ImportError as e:
+        logging.error(f"surf_reports module not available: {e}")
+        return
     
     if not spot_name:
         # No spot specified - update all spots
@@ -579,60 +525,74 @@ async def new_spot_request(request: Request, spot_request: SpotRequest):
         logging.error(f"Database error in spot request: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-if __name__ == "__main__":
-    # ===== MCP SERVER SETUP =====
-    # Initialize MCP server alongside FastAPI
-    mcp_server = Server("surf-report-mcp")
+# ===== MCP TOOL FUNCTIONS =====
+# Custom MCP tools that reuse existing logic
+
+@mcp.tool()
+def list_spots() -> list:
+    """Get a list of available surf spots with their names and coordinates."""
+    spots_list = []
+    for spot_key, spot_info in SURF_SPOTS.items():
+        spots_list.append({
+            "key": spot_key,
+            "name": spot_info.get('name', spot_key.title()),
+            "latitude": str(spot_info.get('lat', '')),
+            "longitude": str(spot_info.get('lon', ''))
+        })
+    return spots_list
+
+@mcp.tool()
+async def get_surf_report(spot: str) -> dict:
+    """Get the latest surf report for a specific spot including wave height, period, tide, wind, and water temperature.
     
-    # Register MCP tools
-    @mcp_server.list_tools()
-    async def list_tools() -> List[Tool]:
-        return [
-            Tool(
-                name="list_spots",
-                description="Get a list of available surf spots with their names and coordinates",
-                inputSchema={
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                }
-            ),
-            Tool(
-                name="get_report", 
-                description="Get the latest surf report for a specific spot including wave height, period, tide, wind, and water temperature",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "spot": {
-                            "type": "string",
-                            "description": "Name of the surf spot (e.g., 'tamarack', 'blacks', 'scripps')"
-                        }
-                    },
-                    "required": ["spot"]
-                }
-            )
-        ]
-    
-    @mcp_server.call_tool()
-    async def call_tool(name: str, arguments: dict) -> List[dict]:
-        if name == "list_spots":
-            spots = mcp_list_spots()
-            return [{"type": "text", "text": f"Available surf spots: {spots}"}]
-        elif name == "get_report":
-            spot = arguments.get("spot")
-            if not spot:
-                return [{"type": "text", "text": "Error: spot parameter is required"}]
+    Args:
+        spot: Name of the surf spot (e.g., 'tamarack', 'blacks', 'scripps')
+    """
+    try:
+        # Query by spot_name (new column) first, fallback to spot (old column) for compatibility - case insensitive
+        result = supabase.table('surf_reports').select('*').ilike('spot_name', spot).order('timestamp', desc=True).limit(1).execute()
+        if not result.data:
+            # Fallback to old 'spot' column if spot_name doesn't have data
+            result = supabase.table('surf_reports').select('*').ilike('spot', spot).order('timestamp', desc=True).limit(1).execute()
+        if result.data:
+            data = result.data[0]
             
-            report = await mcp_get_report(spot)
-            return [{"type": "text", "text": f"Surf report for {spot}: {report}"}]
+            # Transform data for compatibility (same logic as HTTP endpoint)
+            transformed_data = {
+                'spot': data.get('spot_name', data.get('spot', spot)),
+                'timestamp': data.get('timestamp'),
+                'water_temp_f': data.get('water_temp_f'),
+                'wind_speed_mph': data.get('wind_speed_mph', data.get('wind_mph')),
+                'wind_direction_deg': data.get('wind_direction_deg'),
+                'stream_link': data.get('stream_link'),
+                'spot_config': data.get('spot_config', {}),
+                
+                # Wave data
+                'wave_forecast_168h': data.get('wave_forecast_168h', []),
+                'wave_height_forecast': data.get('wave_height_forecast', []),
+                
+                # Period data  
+                'period_forecast_168h': data.get('period_forecast_168h', []),
+                
+                # Tide data
+                'tide_forecast_7d': data.get('tide_forecast_7d', []),
+                'tide_height_forecast': data.get('tide_height_forecast', []),
+                
+                # Current conditions (extract from forecast data) - round to 1 decimal
+                'current_wave_height': round(data.get('wave_forecast_168h')[0][2], 1) if data.get('wave_forecast_168h') and len(data.get('wave_forecast_168h')) > 0 else 'Loading...',  # avg from first entry
+                'current_period': round(data.get('period_forecast_168h')[0][0], 1) if data.get('period_forecast_168h') and len(data.get('period_forecast_168h')) > 0 else 'Loading...',  # period from first entry
+                'current_tide_height': round(data.get('tide_forecast_7d')[0][0], 1) if data.get('tide_forecast_7d') and len(data.get('tide_forecast_7d')) > 0 else 'Loading...'  # height from first entry
+            }
+            
+            return transformed_data
         else:
-            return [{"type": "text", "text": f"Unknown tool: {name}"}]
+            return {"error": "No data available", "spot": spot}
+    except Exception as e:
+        logging.error(f"MCP get_report error: {e}")
+        return {"error": str(e), "spot": spot}
+
+if __name__ == "__main__":
+    # Mount MCP server to the FastAPI app at /mcp endpoint
+    mcp.mount()
     
-    # Create FastAPI MCP integration
-    fastapi_mcp = FastAPIMCPServer(mcp_server)
-    
-    # Add MCP routes to FastAPI app
-    app.mount("/mcp", fastapi_mcp.app)
-    
-    # Run the server with both FastAPI and MCP support
     uvicorn.run(app, host="0.0.0.0", port=8000)
